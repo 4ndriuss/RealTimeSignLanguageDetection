@@ -1,0 +1,21 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# MediaPipe models & Dataset
+utils/*.task
+*.task
+data/
+models/
+*.h5
+*.keras
+*.npy
+
+# IDE Config
+.vscode/
+.idea/
