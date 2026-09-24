@@ -73,7 +73,13 @@ def extract_keypoints(results):
     if results.hand_landmarks and results.handedness:
         for hand_landmarks, handedness in zip(results.hand_landmarks, results.handedness):
             label = handedness[0].category_name
-            keypoints = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks]).flatten()
+            
+            # Normalisasi: Jadikan pergelangan tangan (titik 0) sebagai (0,0,0)
+            wrist_x = hand_landmarks[0].x
+            wrist_y = hand_landmarks[0].y
+            wrist_z = hand_landmarks[0].z
+            
+            keypoints = np.array([[lm.x - wrist_x, lm.y - wrist_y, lm.z - wrist_z] for lm in hand_landmarks]).flatten()
             
             if label == 'Left':
                 lh = keypoints

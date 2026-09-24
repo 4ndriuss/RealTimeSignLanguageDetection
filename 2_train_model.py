@@ -22,36 +22,58 @@ actions = np.load(os.path.join(INPUT_DIR, 'actions.npy'))
 num_classes = len(actions)
 print(f"Memuat {len(X)} sampel asli dari {num_classes} kelas.")
 
-# 2. Keypoint Data Augmentation (Perbanyak data 10x lipat dengan noise sintetis)
-def augment_keypoints(X_data, y_data, copies=9):
-    X_augmented, y_augmented = [], []
+def augment_keypoints_static(X_data, y_data, copies=15):
+    X_aug, y_aug = [], []
     for keypoints, label in zip(X_data, y_data):
-        X_augmented.append(keypoints)
-        y_augmented.append(label)
+        # Tambahkan data asli
+        X_aug.append(keypoints)
+        y_aug.append(label)
         
-        for _ in range(copies):
-            noise = np.random.normal(0, 0.006, size=keypoints.shape)
-            augmented = keypoints.copy()
+        # Buat variasi augmented
+        for i in range(copies):
+            pts = keypoints.copy().reshape(-1, 3)
+            mask = np.any(pts != 0, axis=1)
             
-            mask = augmented != 0
-            augmented[mask] += noise[mask]
+            if np.any(mask):
+                # Rotasi acak
+                theta = np.random.uniform(-np.pi/12, np.pi/12)
+                c, s = np.cos(theta), np.sin(theta)
+                R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
+                
+                # Scaling acak
+                scale = np.random.uniform(0.85, 1.15)
+                
+                pts[mask] = pts[mask] * scale
+                pts[mask] = np.dot(pts[mask], R.T)
+                
+                # Noise Gaussian ringan
+                noise = np.random.normal(0, 0.003, size=pts[mask].shape)
+                pts[mask] += noise
+                
+            X_aug.append(pts.flatten())
+            y_aug.append(label)
             
-            X_augmented.append(augmented)
-            y_augmented.append(label)
-            
-    return np.array(X_augmented), np.array(y_augmented)
+    return np.array(X_aug), np.array(y_aug)
 
-print("Melakukan Data Augmentation untuk memperbanyak sampel...")
-X_aug, y_aug = augment_keypoints(X, y, copies=9)
-print(f"Jumlah sampel setelah Augmentation: {len(X_aug)} data!")
-
-# 3. One-hot encoding & Train-Test Split (80% train, 20% test)
-y_cat = to_categorical(y_aug, num_classes=num_classes)
-X_train, X_test, y_train, y_test = train_test_split(
-    X_aug, y_cat, test_size=0.2, random_state=42, stratify=y_aug
+# 2. Train-Test Split (SEBELUM augmentasi untuk cegah kebocoran data)
+X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# 4. Bangun Arsitektur Model
+print("Melakukan Data Augmentation...")
+# Kita perbanyak data training secara signifikan
+X_train, y_train_aug = augment_keypoints_static(X_train_raw, y_train_raw, copies=20)
+# Data testing tidak di-augment
+X_test, y_test_aug = augment_keypoints_static(X_test_raw, y_test_raw, copies=0)
+
+print(f"Jumlah sampel latih setelah Augmentation: {len(X_train)}")
+print(f"Jumlah sampel uji: {len(X_test)}")
+
+# 3. One-hot encoding
+y_train = to_categorical(y_train_aug, num_classes=num_classes)
+y_test = to_categorical(y_test_aug, num_classes=num_classes)
+
+# 4. Bangun Arsitektur Model (Dense/Statis)
 model = Sequential([
     Dense(256, activation='relu', input_shape=(126,)),
     BatchNormalization(),
@@ -83,7 +105,7 @@ callbacks = [
 ]
 
 # 5. Latih Model
-print("\nMemulai Pelatihan Model (dengan Augmentasi)...")
+print("\nMemulai Pelatihan Model...")
 history = model.fit(
     X_train, y_train,
     epochs=120,

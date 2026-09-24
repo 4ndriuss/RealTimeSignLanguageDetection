@@ -1,77 +1,105 @@
-# Real-Time Sign Language Detection (A-Z) 🤟📷
+# Real-Time Sign Language Detection
 
-A **real-time sign language alphabet recognition system** (A-Z hand gestures) built using **OpenCV**, **MediaPipe Tasks API**, and **TensorFlow / Keras** in Python 3.12.
+Proyek ini adalah sistem deteksi bahasa isyarat (Sign Language) secara *real-time* berbasis webcam menggunakan perpaduan **Google MediaPipe** (untuk melacak *landmark* tangan) dan **TensorFlow/Keras** (untuk klasifikasi gestur *Deep Learning*).
 
----
-
-## 🌟 Key Features
-- **Modern MediaPipe Tasks API**: Tracks 21 3D hand landmark coordinates $(x, y, z)$ per hand for fast, lightweight CPU tracking.
-- **Deep Learning Classification**: 26-class (A-Z) gesture classification powered by a TensorFlow / Keras Dense Neural Network with *Batch Normalization* & *Dropout*.
-- **Keypoint Data Augmentation**: Synthetic coordinate jittering/augmentation to maximize model accuracy even on smaller initial datasets.
-- **High-Performance Real-Time Inference**: Smooth, low-latency prediction overlay directly on OpenCV webcam video feed.
+Model ini didesain khusus untuk mengklasifikasikan huruf-huruf abjad statis (seperti huruf abjad A-Z pada American Sign Language / SIBI) dan telah dioptimalkan agar ringan, tangguh terhadap posisi tangan, serta bebas berkedip (*flicker-free*) pada *frame* kamera.
 
 ---
 
-## 📁 Project Structure
+## ✨ Fitur Unggulan
 
-```text
-RealTimeSignLanguageDetection/
-├── Data/                      # Image dataset subfolders (A through Z)
-├── preprocessed_data/         # Extracted MediaPipe landmark coordinates (.npy)
-├── models/                    # Saved TensorFlow trained model (sign_language_model.keras)
-├── utils/
-│   ├── mediapipe_utils.py     # MediaPipe Tasks API helper & landmark drawing functions
-│   └── hand_landmarker.task   # Official MediaPipe model bundle
-├── 1_preprocess_dataset.py    # Script to extract landmark coordinates from dataset
-├── 2_train_model.py           # Script to train TensorFlow model with Data Augmentation
-├── 3_realtime_detection.py    # Main real-time webcam detection application
-├── test_webcam.py             # Utility script to test camera & MediaPipe pipeline
-├── requirements.txt           # Python dependencies
-├── .gitignore                 # Git ignore configuration
-└── README.md                  # Project documentation
-```
+1. **Keypoints Normalization (Sangat Tangguh):** Sistem mengubah titik *landmark* tangan (x, y, z) menjadi relatif terhadap pergelangan tangan (titik `0, 0, 0`). Ini berarti sistem bisa menebak gestur dengan jitu tidak peduli seberapa dekat/jauh jarak tangan dari kamera atau ditaruh di pojok layar sekalipun.
+2. **Dense Architecture for Static Poses:** Dirancang dengan arsitektur FNN (Feedforward Neural Network) berlapis `Dense` dan `Dropout` yang sangat ideal serta ringan untuk mengenali bentuk huruf abjad yang diam (statis). 
+3. **Data Augmentation Mandiri:** Memperbanyak (*multiply*) data pelatihan secara otomatis dengan menyuntikkan variasi ukuran (scaling), rotasi, dan *noise* Gaussian. Pelatihan tidak rentan terhadap kelebihan porsi belajar (*overfitting*) berkat skema pembagian data (*train-test split*) di awal eksekusi.
+4. **Prediction Smoothing (Majority Voting):** Program *real-time* menyimpan histori sementara (15 *frame* terakhir) untuk menstabilkan teks tebakan di layar, mencegah teks loncat-loncat/berkedip walau pendeteksian Mendiapipe meleset satu-dua *frame*.
+5. **Real-time UI & Error Handling:** Dilengkapi indikator FPS (Frames Per Second) dan penutup jaring (*try-finally*) agar kamera Anda dirilis aman walau program tiba-tiba ditutup (*force close*).
 
 ---
 
-## 🚀 Quick Start Guide
+## 🛠️ Persyaratan Sistem (Prerequisites)
 
-### 1. Environment Setup
-Create and activate a Python virtual environment (Python 3.10 - 3.12 recommended):
+Pastikan Anda memiliki **Python 3.8 - 3.12** terinstal di komputer.
+Library utama yang digunakan:
+- `opencv-python`
+- `numpy`
+- `tensorflow`
+- `mediapipe`
+- `scikit-learn`
 
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
+---
 
-Install all required dependencies:
-```powershell
-pip install -r requirements.txt
-```
+## 🚀 Cara Instalasi
 
-### 2. Preprocess Dataset
-Extract landmark coordinates from the `Data/` folder:
-```powershell
+1. **Clone repositori ini** (atau unduh zip-nya):
+   ```bash
+   git clone https://github.com/USERNAME_ANDA/RealTimeSignLanguageDetection.git
+   cd RealTimeSignLanguageDetection
+   ```
+
+2. **Buat Virtual Environment (Sangat Direkomendasikan)**:
+   ```bash
+   python -m venv venv
+   ```
+   Aktivasi Virtual Environment (Windows):
+   ```bash
+   venv\Scripts\activate
+   ```
+   Aktivasi Virtual Environment (Mac/Linux):
+   ```bash
+   source venv/bin/activate
+   ```
+
+3. **Install Requirements**:
+   *(Jika Anda memiliki file requirements.txt, jalankan `pip install -r requirements.txt`. Jika tidak, jalankan perintah di bawah)*
+   ```bash
+   pip install opencv-python numpy tensorflow mediapipe scikit-learn
+   ```
+
+---
+
+## 🏃 Langkah-Langkah Penggunaan
+
+Untuk menjalankan sistem ini dari awal (melatih hingga menggunakan), ikuti 3 tahapan skrip Python berikut secara berurutan:
+
+### Langkah 1: Ekstraksi Data (Preprocessing)
+```bash
 python 1_preprocess_dataset.py
 ```
+**Fungsi:** Skrip ini akan membaca semua foto/gambar dari direktori `Data/` (misalnya folder A, B, C, dst.). MediaPipe akan melacak letak tulang tangan dan menyimpannya sebagai matriks koordinat ternormalisasi (vektor baris berisi 126 nilai fitur) dalam bentuk file `.npy` di folder `preprocessed_data/`.
 
-### 3. Train Model
-Train the TensorFlow Neural Network:
-```powershell
+### Langkah 2: Pelatihan Model (Training)
+```bash
 python 2_train_model.py
 ```
+**Fungsi:** Skrip ini akan memuat file data `.npy` hasil ekstraksi. Skrip akan memisahkan data menjadi porsi ujian dan latihan, menggandakan data latihan secara acak (augmentasi), melatih *neural network*, mengevaluasi skor akurasi (Test Accuracy), lalu menyimpannya dalam format `models/sign_language_model.keras`.
 
-### 4. Run Real-Time Detection
-Launch your webcam for real-time sign language prediction:
-```powershell
+### Langkah 3: Deteksi Real-Time di Kamera
+```bash
 python 3_realtime_detection.py
 ```
-*(Press **'q'** on the video window to quit)*.
+**Fungsi:** Menyalakan Webcam/Kamera! Program akan mencocokkan postur tangan yang ditangkap dari video ke dalam model `.keras` yang telah dilatih secara spontan. Teks hasil tebakan (Gestur) beserta persentasenya akan muncul pada bingkai kiri atas.
+*(Tekan **tombol Q** di *keyboard* Anda saat jendela rekaman/kamera aktif untuk keluar dan mematikan kamera.)*
 
 ---
 
-## 🛠️ Tech Stack
-- **Python 3.12**
-- **OpenCV** (`opencv-python`)
-- **MediaPipe Tasks API** (`mediapipe`)
-- **TensorFlow & Keras** (`tensorflow`, `keras`)
-- **NumPy & Scikit-Learn** (`numpy`, `scikit-learn`)
+## 📁 Struktur Direktori Utama
+
+```
+RealTimeSignLanguageDetection/
+│
+├── Data/                   # Berisi sub-folder raw dataset gambar (A/, B/, C/)
+├── preprocessed_data/      # Tempat hasil esktraksi titik koordinat (.npy)
+├── models/                 # Tempat hasil pelatihan Keras (.keras)
+├── utils/
+│   └── mediapipe_utils.py  # Skrip utilitas pelacakan MediaPipe
+│
+├── 1_preprocess_dataset.py # Ekstrak raw gambar jadi matriks NumPy
+├── 2_train_model.py        # Bangun & latih Neural Network Keras
+├── 3_realtime_detection.py # Tampilkan webcam dengan prediksi langsung
+├── test_webcam.py          # (Opsional) Uji coba pelacak MediaPipe tanpa AI
+└── README.md
+```
+
+---
+
+Dibuat dengan ❤️ untuk kemudahan komunikasi Bahasa Isyarat! Jangan ragu untuk klik ⭐ (Star) pada repositori ini jika bermanfaat.
