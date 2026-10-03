@@ -2,7 +2,7 @@
 
 This project is a real-time, webcam-based sign language detection system that combines **Google MediaPipe** (for hand landmark tracking) and **TensorFlow/Keras** (for Deep Learning gesture classification).
 
-The model is specifically designed to classify static alphabet gestures (such as the A-Z alphabet in American Sign Language / SIBI). It has been optimized to be lightweight, robust to hand positioning, and completely flicker-free on the camera feed.
+The model is specifically designed to classify static alphabet gestures (such as the A-Z alphabet in Indonesian Sign Language / BISINDO). It has been optimized to be lightweight, robust to hand positioning, and completely flicker-free on the camera feed.
 
 ---
 
@@ -52,7 +52,7 @@ The main libraries used are:
 3. **Install Requirements**:
    *(If you have a requirements.txt file, run `pip install -r requirements.txt`. Otherwise, run the command below)*
    ```bash
-   pip install opencv-python numpy tensorflow mediapipe scikit-learn
+   pip install opencv-python numpy tensorflow mediapipe scikit-learn kagglehub
    ```
 
 ---
@@ -65,7 +65,7 @@ To run this system from scratch (from preprocessing to real-time detection), fol
 ```bash
 python 1_preprocess_dataset.py
 ```
-**Function:** This script will read all images from the `Data/` directory (e.g., folders A, B, C, etc.). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 126 feature values) as a `.npy` file in the `preprocessed_data/` folder.
+**Function:** This script automatically downloads the [Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo) dataset via `kagglehub` (cached after the first download, ~1.4 GB) and reads all images from its `train` and `val` splits (folders A–Z). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 126 feature values) as a `.npy` file in the `preprocessed_data/` folder.
 
 ### Step 2: Model Training
 ```bash
@@ -87,7 +87,6 @@ python 3_realtime_detection.py
 ```
 RealTimeSignLanguageDetection/
 │
-├── Data/                   # Contains sub-folders of raw image datasets (A/, B/, C/)
 ├── preprocessed_data/      # Destination for extracted coordinate points (.npy)
 ├── models/                 # Destination for the trained Keras model (.keras)
 ├── utils/
