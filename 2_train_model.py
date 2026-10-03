@@ -5,10 +5,12 @@ from keras.models import Sequential
 from keras.layers import Input, Dense, Dropout, BatchNormalization
 from keras.utils import to_categorical
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report
-from utils.mediapipe_utils import HAND_FEATURES, NUM_FEATURES
+from scipy.sparse.csgraph import connected_components
+from scipy.spatial.distance import cdist
+from utils.mediapipe_utils import HAND_FEATURES, INTER_FEATURES, NUM_FEATURES
 
 # Data & model paths
 INPUT_DIR = 'preprocessed_data'
@@ -18,6 +20,13 @@ MODEL_DIR = 'models'
 SEED = 42
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
+
+# Two samples of the same class whose hand coordinates differ by less than
+# this RMS distance (in palm-length units, i.e. < 2% of the palm length) are
+# treated as copies of the same source photo. The Kaggle dataset is already
+# augmented (augmented_image_*.jpg), so such copies must never be split
+# between train and test, otherwise the test accuracy is inflated.
+NEAR_DUP_THRESHOLD = 0.02
 
 if not os.path.exists(MODEL_DIR):
     os.makedirs(MODEL_DIR)
@@ -37,24 +46,75 @@ num_classes = len(actions)
 print(f"Loaded {len(X)} raw samples from {num_classes} classes.")
 
 
+def remove_exact_duplicates(X, y, decimals=6):
+    """Drop identical feature vectors.
+
+    Photometric-only augmentations (brightness, blur, ...) produce identical
+    landmarks, which overweight some photos. Identical vectors that carry
+    *different* labels are ambiguous and are dropped entirely.
+    """
+    key = np.round(X, decimals)
+    _, first_idx = np.unique(np.column_stack([key, y]), axis=0, return_index=True)
+    first_idx = np.sort(first_idx)
+    X, y, key = X[first_idx], y[first_idx], key[first_idx]
+
+    # After the (X, y) dedupe, any remaining repeated X has conflicting labels.
+    _, inverse, counts = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    conflict = counts[inverse.ravel()] > 1
+    return X[~conflict], y[~conflict], int(conflict.sum())
+
+
+def near_duplicate_groups(X, y, threshold):
+    """Assign a group id to every sample; near-identical samples share an id.
+
+    Samples of the same class are linked when the RMS distance between their
+    hand coordinates is below `threshold`; each connected component becomes
+    one group, so chains of near-copies stay together.
+    """
+    coords = X[:, :2 * HAND_FEATURES]
+    groups = np.empty(len(X), dtype=int)
+    next_id = 0
+    for c in np.unique(y):
+        idx = np.where(y == c)[0]
+        dist = cdist(coords[idx], coords[idx]) / np.sqrt(coords.shape[1])
+        n_groups, labels = connected_components(dist < threshold, directed=False)
+        groups[idx] = labels + next_id
+        next_id += n_groups
+    return groups
+
+
+n_raw = len(X)
+X, y, n_conflicts = remove_exact_duplicates(X, y)
+print(f"Removed {n_raw - len(X)} exact duplicates "
+      f"({n_conflicts} of them had conflicting labels). Remaining: {len(X)} samples.")
+
+groups = near_duplicate_groups(X, y, NEAR_DUP_THRESHOLD)
+group_sizes = np.bincount(groups)
+print(f"Near-duplicate groups: {len(group_sizes)} "
+      f"(largest: {group_sizes.max()}, singletons: {(group_sizes == 1).sum()})")
+
+
 def mirror_keypoints(features):
     """Return the horizontally mirrored version of one feature vector."""
-    lh = features[:HAND_FEATURES].reshape(-1, 3).copy()
-    rh = features[HAND_FEATURES:2 * HAND_FEATURES].reshape(-1, 3).copy()
-    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + 25].copy()
+    h1 = features[:HAND_FEATURES].reshape(-1, 3).copy()
+    h2 = features[HAND_FEATURES:2 * HAND_FEATURES].reshape(-1, 3).copy()
+    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + INTER_FEATURES].reshape(5, 5).copy()
     n_hands = features[-1]
 
     # Negasi X (karena dicerminkan secara horizontal)
-    lh[:, 0] *= -1
-    rh[:, 0] *= -1
+    h1[:, 0] *= -1
+    h2[:, 0] *= -1
 
-    # Memperbaiki BUG Kritis:
-    # inter adalah flattened 5x5 matriks jarak antar ujung jari.
-    # Jika tangan kiri dan kanan ditukar, matriks jarak harus di-transpose.
-    inter = inter.reshape(5, 5).T.flatten()
+    # Slots are ordered left-to-right on screen. Mirroring only swaps them
+    # when two hands are present; a single hand must stay in slot 1, because
+    # that is the only layout `extract_keypoints` ever produces at inference.
+    if n_hands == 2:
+        # inter adalah flattened 5x5 matriks jarak antar ujung jari.
+        # Jika tangan kiri dan kanan ditukar, matriks jarak harus di-transpose.
+        h1, h2 = h2, h1
+        inter = inter.T
 
-    # Tangan kanan lama menjadi tangan kiri baru, dan sebaliknya
-    return np.concatenate([rh.flatten(), lh.flatten(), inter, [n_hands]])
+    return np.concatenate([h1.flatten(), h2.flatten(), inter.flatten(), [n_hands]])
 
 
 def augment_single(features):
@@ -92,7 +152,8 @@ def augment_single(features):
 
 # Custom Keras Sequence untuk Augmentasi On-The-Fly (Hemat RAM & Dinamis)
 class AugmentDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, X, y, batch_size=128, copies_per_epoch=20):
+    def __init__(self, X, y, batch_size=128, copies_per_epoch=20, **kwargs):
+        super().__init__(**kwargs)
         self.X = X
         self.y = y
         self.batch_size = batch_size
@@ -101,7 +162,6 @@ class AugmentDataGenerator(tf.keras.utils.Sequence):
         self.virtual_length = len(self.X) * self.copies
         self.indices = np.arange(len(self.X))
         np.random.shuffle(self.indices)
-        
     def __len__(self):
         return int(np.ceil(self.virtual_length / self.batch_size))
         
@@ -128,13 +188,17 @@ class AugmentDataGenerator(tf.keras.utils.Sequence):
         np.random.shuffle(self.indices)
 
 
-# 2. Train / Validation / Test split (70 / 15 / 15)
-X_train_raw, X_temp, y_train_raw, y_temp = train_test_split(
-    X, y, test_size=0.3, random_state=SEED, stratify=y
-)
-X_val, X_test, y_val_raw, y_test_raw = train_test_split(
-    X_temp, y_temp, test_size=0.5, random_state=SEED, stratify=y_temp
-)
+# 2. Train / Validation / Test split (~71 / 14 / 14) based on near-duplicate groups
+sgkf = StratifiedGroupKFold(n_splits=7, shuffle=True, random_state=SEED)
+folds = list(sgkf.split(X, y, groups=groups))
+
+test_idx = folds[0][1]
+val_idx = folds[1][1]
+train_idx = np.concatenate([folds[i][1] for i in range(2, 7)])
+
+X_train_raw, y_train_raw = X[train_idx], y[train_idx]
+X_val, y_val_raw = X[val_idx], y[val_idx]
+X_test, y_test_raw = X[test_idx], y[test_idx]
 
 # 3. One-hot encoding
 y_train_raw_cat = to_categorical(y_train_raw, num_classes=num_classes)
