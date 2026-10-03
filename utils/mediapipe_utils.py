@@ -75,10 +75,10 @@ def draw_styled_landmarks(image, results):
                 cv2.circle(image, (cx, cy), 4, (0, 255, 0), -1)
 
 # --- Feature layout -------------------------------------------------------
-# [  0: 63]  Tangan 1 (paling kiri di layar): 21 landmarks x (x, y, z), dinormalisasi
-# [ 63:126]  Tangan 2 (paling kanan di layar): 21 landmarks x (x, y, z), dinormalisasi
-# [126:151]  Inter-hand: 25 fitur jarak antar 5 ujung jari tangan 1 ke 5 ujung jari tangan 2
-# [151]      Jumlah tangan yang terdeteksi (n)
+# [  0: 63]  Hand 1 (leftmost on screen): 21 landmarks x (x, y, z), normalized
+# [ 63:126]  Hand 2 (rightmost on screen): 21 landmarks x (x, y, z), normalized
+# [126:151]  Inter-hand: 25 distance features between 5 fingertips of Hand 1 and 5 fingertips of Hand 2
+# [151]      Number of detected hands (n)
 HAND_FEATURES = 21 * 3
 INTER_FEATURES = 25
 NUM_FEATURES = 2 * HAND_FEATURES + INTER_FEATURES + 1
@@ -122,11 +122,11 @@ def extract_keypoints(results, image_shape):
     if n == 0:
         return np.zeros(NUM_FEATURES)
         
-    # Urutkan secara spasial (kiri ke kanan di frame) berdasarkan X pergelangan tangan (landmark 0)
+    # Sort spatially (left to right in the frame) based on the X coordinate of the wrist (landmark 0)
     hands.sort(key=lambda k: k[0, 0])
     
-    # Hitung rata-rata ukuran tulang telapak (wrist ke middle MCP) sebagai skala penormal
-    # Ini menyelesaikan masalah "shrinkage" jika kedua tangan direntangkan jauh.
+    # Calculate the average palm bone size (wrist to middle MCP) as a normalization scale
+    # This solves the "shrinkage" problem if both hands are stretched far apart.
     scales = [np.linalg.norm(k[SCALE_LANDMARK, :2] - k[0, :2]) for k in hands]
     # Hindari division by zero
     valid_scales = [s for s in scales if s > 1e-6]
@@ -136,7 +136,7 @@ def extract_keypoints(results, image_shape):
     pts = np.concatenate(hands)
     origin = pts.mean(axis=0)
     
-    # Buat wadah untuk 2 tangan
+    # Create a container for 2 hands
     out = np.zeros((2, 21, 3))
     for i, k in enumerate(hands):
         out[i] = (k - origin) / global_scale
@@ -149,8 +149,8 @@ def extract_keypoints(results, image_shape):
         # Jarak pairwise antara 5 ujung jari tangan 1 dengan 5 ujung jari tangan 2
         extra = np.linalg.norm(a[:, None] - b[None], axis=2).flatten()
     
-    # Pad dengan nol jika kurang dari 2 tangan
+    # Pad with zeros if there are less than 2 hands
     extra = np.pad(extra, (0, 25 - len(extra)))
     
     # Gabungkan menjadi 1D array (total 152 fitur)
-    return np.concatenate([out.flatten(), extra, [n]])
+    return np.concatenate([out.flatten(), extra, [n]])

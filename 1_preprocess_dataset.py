@@ -24,9 +24,9 @@ label_map = {label: num for num, label in enumerate(actions)}
 
 print(f"Detected {len(actions)} gesture classes: {actions}")
 
-# Konfigurasi jumlah tangan yang diharapkan untuk tiap kelas.
-# Silakan sesuaikan dengan isyarat BISINDO (contoh: 'A' butuh 2 tangan, 'B' butuh 1).
-# Jika kelas tidak ada di dictionary ini, semua jumlah deteksi tangan akan diterima.
+# Configuration for the expected number of hands per class.
+# Please adjust according to BISINDO gestures (e.g., 'A' needs 2 hands, 'B' needs 1).
+# If a class is not in this dictionary, any number of detected hands will be accepted.
 EXPECTED_HANDS = {
     'A': 2, 'B': 2, 'C': 1, 'D': 2, 'E': 1,
     'F': 1, 'G': 2, 'H': 2, 'I': 1, 'J': 1,
@@ -69,7 +69,7 @@ for action in actions:
         # Hand landmark detection
         _, results = mediapipe_detection(image, landmarker)
         
-        # Filter berdasarkan jumlah tangan yang terdeteksi vs yang diharapkan
+        # Filter based on the number of detected hands vs expected hands
         detected_hands = len(results.hand_landmarks) if results.hand_landmarks else 0
         expected = EXPECTED_HANDS.get(action, detected_hands)
         

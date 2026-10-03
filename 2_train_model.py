@@ -101,7 +101,7 @@ def mirror_keypoints(features):
     inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + INTER_FEATURES].reshape(5, 5).copy()
     n_hands = features[-1]
 
-    # Negasi X (karena dicerminkan secara horizontal)
+    # Negate X (because it is horizontally mirrored)
     h1[:, 0] *= -1
     h2[:, 0] *= -1
 
@@ -109,8 +109,8 @@ def mirror_keypoints(features):
     # when two hands are present; a single hand must stay in slot 1, because
     # that is the only layout `extract_keypoints` ever produces at inference.
     if n_hands == 2:
-        # inter adalah flattened 5x5 matriks jarak antar ujung jari.
-        # Jika tangan kiri dan kanan ditukar, matriks jarak harus di-transpose.
+        # 'inter' is the flattened 5x5 distance matrix between fingertips.
+        # If left and right hands are swapped, the distance matrix must be transposed.
         h1, h2 = h2, h1
         inter = inter.T
 
@@ -119,7 +119,7 @@ def mirror_keypoints(features):
 
 def augment_single(features):
     """Augment a single feature vector."""
-    # Mirroring (50% probabilitas)
+    # Mirroring (50% probability)
     if np.random.rand() < 0.5:
         features = mirror_keypoints(features)
 
@@ -129,7 +129,7 @@ def augment_single(features):
     
     mask = np.any(pts != 0, axis=1)
     
-    # Random rotasi 2D (+/- 15 derajat)
+    # Random 2D rotation (+/- 15 degrees)
     theta = np.random.uniform(-np.pi/12, np.pi/12)
     c, s = np.cos(theta), np.sin(theta)
     R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
@@ -137,20 +137,20 @@ def augment_single(features):
     scale = np.random.uniform(0.9, 1.1)
     
     if np.any(mask):
-        # Rotasi dan Skala diterapkan pada koordinat titik
+        # Rotation and Scaling are applied to point coordinates
         pts[mask] = np.dot(pts[mask] * scale, R.T)
-        # Noise Gaussian kecil
+        # Small Gaussian noise
         pts[mask] += np.random.normal(0, 0.015, size=pts[mask].shape)
 
-    # BUG DIPERBAIKI: inter adalah jarak skalar (distance), bukan vektor.
-    # Jarak tidak bisa dirotasi dengan matriks 2D, hanya bisa diskala.
+    # FIX: 'inter' are scalar distances, not vectors.
+    # Distances cannot be rotated with a 2D matrix, only scaled.
     if np.any(inter):
         inter = inter * scale
         
     return np.concatenate([pts.flatten(), inter, [n_hands]])
 
 
-# Custom Keras Sequence untuk Augmentasi On-The-Fly (Hemat RAM & Dinamis)
+# Custom Keras Sequence for On-The-Fly Augmentation (RAM Efficient & Dynamic)
 class AugmentDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, X, y, batch_size=128, copies_per_epoch=20, **kwargs):
         super().__init__(**kwargs)
@@ -158,7 +158,7 @@ class AugmentDataGenerator(tf.keras.utils.Sequence):
         self.y = y
         self.batch_size = batch_size
         self.copies = copies_per_epoch
-        # Memperpanjang epoch secara virtual agar setara dengan dataset statis sebelumnya
+        # Extend epoch virtually to match the previous static dataset size
         self.virtual_length = len(self.X) * self.copies
         self.indices = np.arange(len(self.X))
         np.random.shuffle(self.indices)
@@ -170,7 +170,7 @@ class AugmentDataGenerator(tf.keras.utils.Sequence):
         real_index = (index * self.batch_size) % len(self.X)
         
         batch_indices = self.indices[real_index:real_index+self.batch_size]
-        # Jika berada di ujung array, ambil sisanya dengan me-loop dari depan
+        # If at the end of the array, take the remainder by looping from the beginning
         if len(batch_indices) < self.batch_size:
             diff = self.batch_size - len(batch_indices)
             batch_indices = np.concatenate([batch_indices, self.indices[:diff]])
