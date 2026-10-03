@@ -54,6 +54,11 @@ def predict(payload: ImagePayload):
         
         if frame is None:
             raise ValueError("Invalid image")
+            
+        # [SECURITY FIX] 4. Image Dimensions Limit
+        # Reject decompressed images larger than 2000x2000 to prevent processing overhead.
+        if frame.shape[0] > 2000 or frame.shape[1] > 2000:
+            raise ValueError("Image dimensions too large")
 
         # 1. Detect hand landmarks
         _, results = mediapipe_detection(frame, landmarker)
