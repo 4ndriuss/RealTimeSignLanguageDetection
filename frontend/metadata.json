@@ -1,0 +1,10 @@
+{
+  "name": "IsyaratKita - Penerjemah Bahasa Isyarat Real-Time",
+  "description": "Platform penerjemah bahasa isyarat real-time inklusif berbasis kecerdasan buatan dari kamera ke teks untuk menjembatani komunikasi setara.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

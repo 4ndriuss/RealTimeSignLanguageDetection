@@ -4,36 +4,36 @@ import numpy as np
 import urllib.request
 import mediapipe as mp
 
-# Path penyimpanan file model hand landmarker
+# Path to save the hand landmarker model file
 MODEL_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(MODEL_DIR, 'hand_landmarker.task')
 MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
 
 def download_model_if_needed():
-    """Mengunduh file model hand_landmarker.task jika belum ada secara otomatis."""
+    """Download the hand_landmarker.task model file automatically if it doesn't exist."""
     if not os.path.exists(MODEL_PATH):
-        print("Mengunduh model hand_landmarker.task (sekitar 9 MB)...")
+        print("Downloading hand_landmarker.task model (approx. 9 MB)...")
         urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        print("Selesai mengunduh model!")
+        print("Model download complete!")
 
-# Inisialisasi MediaPipe Tasks API
+# Initialize MediaPipe Tasks API
 BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-# Koneksi garis antar 21 titik sendi jari
+# Connection lines between the 21 hand landmarks
 HAND_CONNECTIONS = [
-    (0,1), (1,2), (2,3), (3,4),          # Ibu jari
-    (0,5), (5,6), (6,7), (7,8),          # Telunjuk
-    (5,9), (9,10), (10,11), (11,12),     # Jari Tengah
-    (9,13), (13,14), (14,15), (15,16),   # Jari Manis
-    (13,17), (17,18), (18,19), (19,20),  # Kelingking
-    (0,17)                               # Pergelangan tangan ke kelingking
+    (0,1), (1,2), (2,3), (3,4),          # Thumb
+    (0,5), (5,6), (6,7), (7,8),          # Index finger
+    (5,9), (9,10), (10,11), (11,12),     # Middle finger
+    (9,13), (13,14), (14,15), (15,16),   # Ring finger
+    (13,17), (17,18), (18,19), (19,20),  # Pinky
+    (0,17)                               # Wrist to pinky
 ]
 
 def create_landmarker(min_confidence=0.5):
-    """Membuat objek HandLandmarker MediaPipe Tasks.
+    """Creates a MediaPipe Tasks HandLandmarker object.
 
     Args:
         min_confidence: Minimum hand detection/presence confidence. A lower
@@ -52,24 +52,24 @@ def create_landmarker(min_confidence=0.5):
     return HandLandmarker.create_from_options(options)
 
 def mediapipe_detection(image, landmarker):
-    """Proses deteksi frame gambar menggunakan MediaPipe Tasks API."""
+    """Process image frame detection using the MediaPipe Tasks API."""
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
     results = landmarker.detect(mp_image)
     return image, results
 
 def draw_styled_landmarks(image, results):
-    """Menggambar titik dan garis tangan secara manual pada frame OpenCV."""
+    """Manually draw hand points and lines on the OpenCV frame."""
     if results.hand_landmarks:
         h, w, _ = image.shape
         for hand_landmarks in results.hand_landmarks:
-            # 1. Gambar garis koneksi sendi
+            # 1. Draw joint connection lines
             for p1, p2 in HAND_CONNECTIONS:
                 x1, y1 = int(hand_landmarks[p1].x * w), int(hand_landmarks[p1].y * h)
                 x2, y2 = int(hand_landmarks[p2].x * w), int(hand_landmarks[p2].y * h)
                 cv2.line(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 
-            # 2. Gambar lingkaran titik sendi
+            # 2. Draw joint point circles
             for lm in hand_landmarks:
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 cv2.circle(image, (cx, cy), 4, (0, 255, 0), -1)
@@ -104,7 +104,7 @@ def _landmarks_to_pixels(hand_landmarks, width, height):
 
 
 def extract_keypoints(results, image_shape):
-    """Mengekstrak NUM_FEATURES (128) fitur tangan kiri & kanan.
+    """Extract NUM_FEATURES (128) left & right hand features.
 
     Args:
         results: HandLandmarkerResult returned by `mediapipe_detection`.

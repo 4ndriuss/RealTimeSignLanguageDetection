@@ -4,27 +4,27 @@ import numpy as np
 import kagglehub
 from utils.mediapipe_utils import create_landmarker, mediapipe_detection, extract_keypoints
 
-# Download dataset BISINDO (Indonesian Sign Language) dari Kaggle
-# (otomatis di-cache, tidak diunduh ulang jika sudah ada)
+# Download BISINDO (Indonesian Sign Language) dataset from Kaggle
+# (automatically cached, will not re-download if already exists)
 path = kagglehub.dataset_download("agungmrf/indonesian-sign-language-bisindo")
 print("Path to dataset files:", path)
 
-# Struktur dataset: bisindo/images/{train,val}/{A..Z}/*.jpg
+# Dataset structure: bisindo/images/{train,val}/{A..Z}/*.jpg
 IMAGES_DIR = os.path.join(path, 'bisindo', 'images')
-SPLITS = ['train', 'val']  # Digabung, karena split dilakukan di 2_train_model.py
+SPLITS = ['train', 'val']  # Merged, because splitting is handled in 2_train_model.py
 OUTPUT_DIR = 'preprocessed_data'
 
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
-# Label kelas A-Z
+# Class labels A-Z
 train_dir = os.path.join(IMAGES_DIR, SPLITS[0])
 actions = [folder for folder in sorted(os.listdir(train_dir)) if os.path.isdir(os.path.join(train_dir, folder))]
 label_map = {label: num for num, label in enumerate(actions)}
 
-print(f"Mendeteksi {len(actions)} kelas gestur: {actions}")
+print(f"Detected {len(actions)} gesture classes: {actions}")
 
-# Inisialisasi MediaPipe Tasks
+# Initialize MediaPipe Tasks
 # A lower confidence (0.3) is used for static dataset images: on a sample of
 # 400 images it raised the hand detection rate from ~80% to ~84%, recovering
 # training samples that the default 0.5 threshold would discard.
@@ -36,7 +36,7 @@ total_images = 0
 processed_images = 0
 
 for action in actions:
-    # Kumpulkan gambar dari semua split (train + val)
+    # Collect images from all splits (train + val)
     image_paths = []
     for split in SPLITS:
         action_dir = os.path.join(IMAGES_DIR, split, action)
@@ -45,7 +45,7 @@ for action in actions:
         image_paths += [os.path.join(action_dir, f) for f in os.listdir(action_dir)
                         if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
     
-    print(f"Memproses kelas '{action}' ({len(image_paths)} gambar)...")
+    print(f"Processing class '{action}' ({len(image_paths)} images)...")
     
     for img_path in image_paths:
         total_images += 1
@@ -54,14 +54,14 @@ for action in actions:
         if image is None:
             continue
             
-        # Deteksi landmark tangan
+        # Hand landmark detection
         _, results = mediapipe_detection(image, landmarker)
         
         # Extract NUM_FEATURES (128) normalized features; the image shape is
         # required to correct for MediaPipe's per-axis normalization.
         keypoints = extract_keypoints(results, image.shape)
         
-        # Simpan jika ada tangan terdeteksi (keypoints tidak bernilai 0 semua)
+        # Save if any hand is detected (keypoints are not all zeros)
         if np.any(keypoints):
             X.append(keypoints)
             y.append(label_map[action])
@@ -70,15 +70,15 @@ for action in actions:
 X = np.array(X)
 y = np.array(y)
 
-print("\n--- Hasil Preprocessing ---")
-print(f"Total gambar diproses : {total_images}")
-print(f"Berhasil diekstrak    : {processed_images} sampel")
-print(f"Shape fitur (X)       : {X.shape}")
-print(f"Shape label (y)       : {y.shape}")
+print("\n--- Preprocessing Results ---")
+print(f"Total images processed : {total_images}")
+print(f"Successfully extracted : {processed_images} samples")
+print(f"Feature shape (X)      : {X.shape}")
+print(f"Label shape (y)        : {y.shape}")
 
-# Simpan hasil ekstraksi keypoints ke file .npy
+# Save extracted keypoints to .npy files
 np.save(os.path.join(OUTPUT_DIR, 'X.npy'), X)
 np.save(os.path.join(OUTPUT_DIR, 'y.npy'), y)
 np.save(os.path.join(OUTPUT_DIR, 'actions.npy'), np.array(actions))
 
-print(f"\nData berhasil disimpan di folder '{OUTPUT_DIR}'!")
+print(f"\nData successfully saved in '{OUTPUT_DIR}' directory!")

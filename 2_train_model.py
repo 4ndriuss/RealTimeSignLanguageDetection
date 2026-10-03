@@ -10,7 +10,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report
 from utils.mediapipe_utils import HAND_FEATURES, NUM_FEATURES
 
-# Path data & model
+# Data & model paths
 INPUT_DIR = 'preprocessed_data'
 MODEL_DIR = 'models'
 
@@ -35,7 +35,7 @@ if X.shape[1] != NUM_FEATURES:
     )
 
 num_classes = len(actions)
-print(f"Memuat {len(X)} sampel asli dari {num_classes} kelas.")
+print(f"Loaded {len(X)} raw samples from {num_classes} classes.")
 
 
 def mirror_keypoints(features):
@@ -73,11 +73,11 @@ def augment_keypoints_static(X_data, y_data, copies=20):
     """
     X_aug, y_aug = [], []
     for keypoints, label in zip(X_data, y_data):
-        # Tambahkan data asli
+        # Add original data
         X_aug.append(keypoints)
         y_aug.append(label)
         
-        # Buat variasi augmented
+        # Create augmented variations
         for _ in range(copies):
             features = keypoints.copy()
             if np.random.rand() < 0.5:
@@ -87,7 +87,7 @@ def augment_keypoints_static(X_data, y_data, copies=20):
             inter = features[2 * HAND_FEATURES:]
             mask = np.any(pts != 0, axis=1)
             
-            # Rotasi acak (+/- 15 degrees around the camera axis)
+            # Random rotation (+/- 15 degrees around the camera axis)
             theta = np.random.uniform(-np.pi/12, np.pi/12)
             c, s = np.cos(theta), np.sin(theta)
             R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
@@ -100,7 +100,7 @@ def augment_keypoints_static(X_data, y_data, copies=20):
             if np.any(mask):
                 pts[mask] = np.dot(pts[mask] * scale, R.T)
                 
-                # Noise Gaussian ringan. Units are now "hand sizes"
+                # Light Gaussian noise. Units are now "hand sizes"
                 # (wrist -> middle MCP = 1.0), so 0.015 is roughly the old
                 # 0.003 in normalized image units for a typical hand.
                 pts[mask] += np.random.normal(0, 0.015, size=pts[mask].shape)
@@ -114,8 +114,8 @@ def augment_keypoints_static(X_data, y_data, copies=20):
     return np.array(X_aug), np.array(y_aug)
 
 
-# 2. Train / Validation / Test split (70 / 15 / 15), SEBELUM augmentasi untuk
-# cegah kebocoran data. A separate validation set drives EarlyStopping and
+# 2. Train / Validation / Test split (70 / 15 / 15), BEFORE augmentation to
+# prevent data leakage. A separate validation set drives EarlyStopping and
 # ReduceLROnPlateau so that the test set stays completely unseen until the
 # final evaluation; previously the test set doubled as validation data, which
 # made the reported test accuracy optimistic.
@@ -126,14 +126,14 @@ X_val, X_test, y_val_raw, y_test_raw = train_test_split(
     X_temp, y_temp, test_size=0.5, random_state=SEED, stratify=y_temp
 )
 
-print("Melakukan Data Augmentation...")
-# Kita perbanyak data training secara signifikan
+print("Performing Data Augmentation...")
+# Significantly multiply the training data
 X_train, y_train_aug = augment_keypoints_static(X_train_raw, y_train_raw, copies=20)
-# Data validasi & testing tidak di-augment
+# Validation & testing data remain unaugmented
 
-print(f"Jumlah sampel latih setelah Augmentation: {len(X_train)}")
-print(f"Jumlah sampel validasi: {len(X_val)}")
-print(f"Jumlah sampel uji: {len(X_test)}")
+print(f"Training samples after Augmentation: {len(X_train)}")
+print(f"Validation samples: {len(X_val)}")
+print(f"Testing samples: {len(X_test)}")
 
 # 3. One-hot encoding
 y_train = to_categorical(y_train_aug, num_classes=num_classes)
@@ -147,7 +147,7 @@ y_test = to_categorical(y_test_raw, num_classes=num_classes)
 weights = compute_class_weight('balanced', classes=np.arange(num_classes), y=y_train_raw)
 class_weight = dict(enumerate(weights))
 
-# 4. Bangun Arsitektur Model (Dense/Statis)
+# 4. Build Model Architecture (Dense/Static)
 model = Sequential([
     Input(shape=(NUM_FEATURES,)),
     Dense(256, activation='relu'),
@@ -179,8 +179,8 @@ callbacks = [
     EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True, verbose=1)
 ]
 
-# 5. Latih Model
-print("\nMemulai Pelatihan Model...")
+# 5. Train Model
+print("\nStarting Model Training...")
 history = model.fit(
     X_train, y_train,
     epochs=120,
@@ -193,9 +193,9 @@ history = model.fit(
     verbose=1
 )
 
-# 6. Evaluasi Model (on the held-out test set, untouched during training)
+# 6. Evaluate Model (on the held-out test set, untouched during training)
 test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
-print(f"\n--- Evaluasi Akhir (Setelah Dioptimasi) ---")
+print(f"\n--- Final Evaluation (Optimized Model) ---")
 print(f"Test Accuracy: {test_acc * 100:.2f}%")
 print(f"Test Loss    : {test_loss:.4f}")
 
@@ -204,7 +204,7 @@ y_pred = np.argmax(model.predict(X_test, verbose=0), axis=1)
 print("\nPer-class report (test set):")
 print(classification_report(y_test_raw, y_pred, target_names=[str(a) for a in actions], digits=3))
 
-# 7. Simpan Model
+# 7. Save Model
 model_save_path = os.path.join(MODEL_DIR, 'sign_language_model.keras')
 model.save(model_save_path)
-print(f"\nModel teroptimasi berhasil disimpan di: '{model_save_path}'!")
+print(f"\nOptimized model successfully saved at: '{model_save_path}'!")

@@ -10,11 +10,11 @@ __pycache__/
 # MediaPipe models & Dataset
 utils/*.task
 *.task
-data/
-models/
-*.h5
-*.keras
-*.npy
+
+# Optional: Kalau kamu tidak ingin mengupload X.npy dan y.npy (9 MB) karena terlalu besar,
+# kamu bisa uncomment dua baris di bawah ini. Namun actions.npy wajib di-push.
+# preprocessed_data/X.npy
+# preprocessed_data/y.npy
 
 # IDE Config
 .vscode/

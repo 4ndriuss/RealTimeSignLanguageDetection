@@ -6,30 +6,30 @@ from utils.mediapipe_utils import (
     extract_keypoints
 )
 
-# Inisialisasi HandLandmarker (Otomatis download model jika belum ada)
+# Initialize HandLandmarker (automatically downloads the model if missing)
 landmarker = create_landmarker()
 
 cap = cv2.VideoCapture(0)
 
-print("Kamera dinyalakan... Tekan 'q' pada jendela video untuk keluar.")
+print("Camera started... Press 'q' on the video window to exit.")
 
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
-        print("Gagal mengambil frame dari webcam.")
+        print("Failed to grab frame from webcam.")
         break
 
-    # 1. Deteksi tangan
+    # 1. Hand detection
     image, results = mediapipe_detection(frame, landmarker)
     
-    # 2. Gambar titik & garis di layar
+    # 2. Draw points & lines on the screen
     draw_styled_landmarks(image, results)
     
-    # 3. Ekstrak keypoints (the frame shape is required by the extractor)
+    # 3. Extract keypoints (the frame shape is required by the extractor)
     keypoints = extract_keypoints(results, image.shape)
-    print("Ukuran Keypoints:", keypoints.shape)
+    print("Keypoints shape:", keypoints.shape)
 
-    cv2.imshow('Uji Coba MediaPipe Tasks (Python 3.12)', image)
+    cv2.imshow('MediaPipe Tasks Test (Python 3.12)', image)
 
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break

@@ -25,6 +25,7 @@ The main libraries used are:
 - `tensorflow`
 - `mediapipe`
 - `scikit-learn`
+- `fastapi`, `uvicorn`, `pydantic` (for Web API)
 
 ---
 
@@ -52,7 +53,7 @@ The main libraries used are:
 3. **Install Requirements**:
    *(If you have a requirements.txt file, run `pip install -r requirements.txt`. Otherwise, run the command below)*
    ```bash
-   pip install opencv-python numpy tensorflow mediapipe scikit-learn kagglehub
+   pip install opencv-python numpy tensorflow mediapipe scikit-learn kagglehub fastapi uvicorn pydantic
    ```
 
 ---
@@ -65,7 +66,7 @@ To run this system from scratch (from preprocessing to real-time detection), fol
 ```bash
 python 1_preprocess_dataset.py
 ```
-**Function:** This script automatically downloads the [Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo) dataset via `kagglehub` (cached after the first download, ~1.4 GB) and reads all images from its `train` and `val` splits (folders A–Z). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 126 feature values) as a `.npy` file in the `preprocessed_data/` folder.
+**Function:** This script automatically downloads the [Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo) dataset via `kagglehub` (cached after the first download, ~1.4 GB) and reads all images from its `train` and `val` splits (folders A–Z). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 128 feature values) as a `.npy` file in the `preprocessed_data/` folder.
 
 ### Step 2: Model Training
 ```bash
@@ -73,20 +74,40 @@ python 2_train_model.py
 ```
 **Function:** This script loads the `.npy` files extracted previously. It splits the data into testing and training sets, multiplies the training data randomly (augmentation), trains the neural network, evaluates the Test Accuracy score, and finally saves it in the `models/sign_language_model.keras` format.
 
-### Step 3: Real-Time Camera Detection
+### Step 3: Real-Time Camera Detection (Local OpenCV)
 ```bash
 python 3_realtime_detection.py
 ```
 **Function:** Turns on your Webcam! The program will match the hand postures captured from the video against the trained `.keras` model in real-time. The predicted text (Gesture) along with its confidence percentage will appear in the top left corner of the frame.
 *(Press the **Q key** on your keyboard while the video window is active to exit and turn off the camera.)*
 
+### Step 4: Web Application Interface (IsyaratKita)
+This project includes a modern React web interface (in the `frontend/` folder) that communicates with a FastAPI Python backend (`4_api.py`).
+
+1. **Start the Backend API:**
+   Double-click `start_api.bat` or run the following in your terminal:
+   ```bash
+   python 4_api.py
+   ```
+   *This starts the FastAPI server on `http://127.0.0.1:8000`.*
+
+2. **Start the Frontend Web App:**
+   Open a new terminal and navigate to the `frontend` folder:
+   ```bash
+   cd frontend
+   npm install --legacy-peer-deps
+   npm run dev
+   ```
+   *Open `http://localhost:5173` in your browser.*
+
 ---
 
 ## 📁 Core Directory Structure
 
-```
+```text
 RealTimeSignLanguageDetection/
 │
+├── frontend/               # React + Vite Web Interface
 ├── preprocessed_data/      # Destination for extracted coordinate points (.npy)
 ├── models/                 # Destination for the trained Keras model (.keras)
 ├── utils/
@@ -94,7 +115,9 @@ RealTimeSignLanguageDetection/
 │
 ├── 1_preprocess_dataset.py # Extracts raw images into NumPy matrices
 ├── 2_train_model.py        # Builds & trains the Keras Neural Network
-├── 3_realtime_detection.py # Displays webcam feed with live predictions
+├── 3_realtime_detection.py # Displays webcam feed with live predictions (OpenCV)
+├── 4_api.py                # FastAPI Backend for Web Integration
+├── start_api.bat           # Shortcut to start the backend server
 ├── test_webcam.py          # (Optional) Tests the MediaPipe tracker without AI
 └── README.md
 ```
