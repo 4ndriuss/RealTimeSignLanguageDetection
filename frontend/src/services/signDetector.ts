@@ -146,6 +146,12 @@ export function generateDynamicLandmarks(baseX = 150, baseY = 150, variance = 6)
  * 3. Send via HTTP POST to your API_URL.
  * 4. Map the JSON response from your server to the DetectionResult interface.
  */
+// Smoothing state for majority voting
+const predictionHistory: string[] = [];
+const confidenceHistory: {label: string, confidence: number}[] = [];
+const HISTORY_LENGTH = 15;
+let missingFrames = 0;
+
 export async function detectSign(
   frameSource?: HTMLVideoElement | HTMLCanvasElement | ImageData | null,
   activeStandard: SignStandard = 'BISINDO',
@@ -165,7 +171,7 @@ export async function detectSign(
       base64Image = dataUrl.split(",")[1];
     } else {
       return {
-        signText: "Waiting for movement...",
+        signText: "",
         confidence: 0,
         standard: activeStandard,
         handDetected: false,
@@ -190,11 +196,51 @@ export async function detectSign(
     }
 
     const data = await response.json();
+    let finalLabel = "";
+    let finalConfidence = 0;
+
+    // 3. Smooth predictions using majority voting
+    if (data.status === "ok" && data.predicted_label) {
+      missingFrames = 0;
+      predictionHistory.push(data.predicted_label);
+      confidenceHistory.push({ label: data.predicted_label, confidence: data.confidence });
+
+      if (predictionHistory.length > HISTORY_LENGTH) {
+        predictionHistory.shift();
+        confidenceHistory.shift();
+      }
+
+      // Majority vote
+      const counts: Record<string, number> = {};
+      let maxCount = 0;
+      let mostCommon = data.predicted_label;
+      for (const label of predictionHistory) {
+        counts[label] = (counts[label] || 0) + 1;
+        if (counts[label] > maxCount) {
+          maxCount = counts[label];
+          mostCommon = label;
+        }
+      }
+
+      // Average confidence of the frames that voted for the winner
+      const matchingConfs = confidenceHistory.filter(x => x.label === mostCommon).map(x => x.confidence);
+      finalLabel = mostCommon;
+      finalConfidence = matchingConfs.reduce((a, b) => a + b, 0) / matchingConfs.length;
+
+    } else {
+      missingFrames++;
+      if (missingFrames > HISTORY_LENGTH) {
+        predictionHistory.length = 0;
+        confidenceHistory.length = 0;
+      }
+      finalConfidence = data.confidence || 0;
+    }
+
     return {
-      signText: data.predicted_label === "Waiting for movement..." ? "" : data.predicted_label,
-      confidence: data.confidence, // Range 0.0 - 1.0
+      signText: finalLabel,
+      confidence: finalConfidence,
       standard: "BISINDO",
-      handDetected: data.confidence > 0,
+      handDetected: data.status !== "no_hand",
       timestamp: Date.now()
     };
   } catch (error) {

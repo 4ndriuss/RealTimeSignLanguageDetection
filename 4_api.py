@@ -18,7 +18,7 @@ app = FastAPI(title="BISINDO Sign Language API")
 # when Vite changes ports or when the browser sends an "Accept" header.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,11 +35,8 @@ model = tf.keras.models.load_model(MODEL_PATH)
 actions = np.load(ACTIONS_PATH)
 landmarker = create_landmarker()
 
-# Prediction smoothing state
-threshold = 0.5
-prediction_history = collections.deque(maxlen=15)
-confidence_history = collections.deque(maxlen=15)
-missing_frames = 0
+# API Configuration
+CONFIDENCE_THRESHOLD = 0.5
 
 class ImagePayload(BaseModel):
     # [SECURITY FIX] 2. Payload Size Limit (Prevent Denial of Service / DoS)
@@ -48,11 +45,10 @@ class ImagePayload(BaseModel):
     image: str = Field(..., max_length=7000000)
 
 @app.post("/predict")
-async def predict(payload: ImagePayload):
-    global missing_frames
+def predict(payload: ImagePayload):
     try:
-        # Decode base64 image
-        img_data = base64.b64decode(payload.image)
+        # Decode base64 image (validate=True ensures proper base64 format)
+        img_data = base64.b64decode(payload.image, validate=True)
         np_arr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         
@@ -65,37 +61,30 @@ async def predict(payload: ImagePayload):
         # 2. Extract features
         keypoints = extract_keypoints(results, frame.shape)
         
-        # 3. Predict
+        # 3. Predict per frame
         if np.any(keypoints):
-            missing_frames = 0
-            
             input_data = np.expand_dims(keypoints, axis=0).astype(np.float32)
             res = model(input_data, training=False).numpy()[0]
             
             predicted_index = np.argmax(res)
             confidence = float(res[predicted_index])
             
-            if confidence > threshold:
-                predicted_label = str(actions[predicted_index])
-                prediction_history.append(predicted_label)
-                confidence_history.append((predicted_label, confidence))
-                
-            if len(prediction_history) > 0:
-                most_common_label = collections.Counter(prediction_history).most_common(1)[0][0]
-                avg_conf = float(np.mean([c for l, c in confidence_history if l == most_common_label]))
-                
+            if confidence > CONFIDENCE_THRESHOLD:
                 return {
-                    "predicted_label": most_common_label,
-                    "confidence": avg_conf
+                    "status": "ok",
+                    "predicted_label": str(actions[predicted_index]),
+                    "confidence": confidence
                 }
-        else:
-            missing_frames += 1
-            if missing_frames > 15:
-                prediction_history.clear()
-                confidence_history.clear()
+            else:
+                return {
+                    "status": "uncertain",
+                    "predicted_label": None,
+                    "confidence": confidence
+                }
                 
         return {
-            "predicted_label": "Menunggu gerakan...",
+            "status": "no_hand",
+            "predicted_label": None,
             "confidence": 0.0
         }
 
