@@ -44,7 +44,7 @@ export const LiveDemo: React.FC<LiveDemoProps> = ({ lang }) => {
   const [showApiGuide, setShowApiGuide] = useState<boolean>(false);
 
   const [currentResult, setCurrentResult] = useState<DetectionResult>({
-    signText: "Menunggu gerakan...",
+    signText: "Waiting for movement...",
     signLabel: "STANDBY",
     confidence: 0,
     standard: 'BISINDO',
@@ -107,7 +107,7 @@ const runDetectionLoop = useCallback(async () => {
         }, delay);
       }
     } catch (err) {
-      console.error("Kesalahan loop deteksi:", err);
+      console.error("Detection loop error:", err);
       if (isLoopRunningRef.current) {
         setTimeout(runDetectionLoop, 1500);
       }
@@ -150,7 +150,7 @@ const runDetectionLoop = useCallback(async () => {
         };
       }
     } catch (err: any) {
-      console.warn("Gagal membuka kamera:", err);
+      console.warn("Failed to open camera:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setCameraStatus('denied');
         setErrorMessage(
@@ -170,7 +170,7 @@ const runDetectionLoop = useCallback(async () => {
   };
 
 const addCurrentSignToSentence = () => {
-    if (!currentResult.signText || currentResult.signText === "Menunggu gerakan...") return;
+    if (!currentResult.signText || currentResult.signText === "Waiting for movement...") return;
 
     const lastWord = sentenceHistory[sentenceHistory.length - 1]?.text;
     if (lastWord === currentResult.signText) return;
@@ -251,7 +251,7 @@ const addCurrentSignToSentence = () => {
         {/* Workbench Layout: Video Canvas + Inspector Controls */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* SISI KIRI: Video Feed Frame (7 Kolom) */}
+          {/* LEFT PANEL: Video Feed Frame (7 Columns) */}
           <div className="lg:col-span-7 flex flex-col space-y-3">
             
             {/* Camera Viewport with Hairline Borders and Crosshair Accents */}
@@ -389,7 +389,7 @@ const addCurrentSignToSentence = () => {
 
           </div>
 
-          {/* SISI KANAN: Inspector Result (5 Kolom) */}
+          {/* RIGHT PANEL: Inspector Result (5 Columns) */}
           <div className="lg:col-span-5 flex flex-col space-y-3">
             
             {/* Live Detected Token */}
@@ -437,6 +437,7 @@ const addCurrentSignToSentence = () => {
     </section>
   );
 };
+
 
 
 

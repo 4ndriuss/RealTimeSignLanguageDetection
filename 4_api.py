@@ -14,8 +14,8 @@ from utils.mediapipe_utils import create_landmarker, mediapipe_detection, extrac
 app = FastAPI(title="BISINDO Sign Language API")
 
 # [SECURITY FIX] 1. Restrict CORS (Cross-Origin Resource Sharing)
-# Kita buka untuk semua port localhost agar tidak terjadi error 400 Bad Request (Preflight)
-# saat Vite berubah port atau saat browser mengirim header "Accept".
+# Allow all localhost ports to prevent 400 Bad Request (Preflight) errors
+# when Vite changes ports or when the browser sends an "Accept" header.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,9 +42,9 @@ confidence_history = collections.deque(maxlen=15)
 missing_frames = 0
 
 class ImagePayload(BaseModel):
-    # [SECURITY FIX] 2. Payload Size Limit (Mencegah Denial of Service / DoS)
-    # Batasi panjang string base64 maksimal sekitar 5 MB (sekitar 7 juta karakter)
-    # Jika ada yang iseng mengirim string berukuran 1GB, server akan menolak sebelum kehabisan RAM.
+    # [SECURITY FIX] 2. Payload Size Limit (Prevent Denial of Service / DoS)
+    # Limit the base64 string length to a maximum of approximately 5 MB (around 7 million characters)
+    # If an attacker sends a 1GB string, the server will reject it before running out of RAM.
     image: str = Field(..., max_length=7000000)
 
 @app.post("/predict")
@@ -100,11 +100,12 @@ async def predict(payload: ImagePayload):
         }
 
     except Exception as e:
-        # [SECURITY FIX] 3. Mencegah Information Leakage (Kebocoran Informasi)
-        # Hindari mengirim detail pesan error Python (str(e)) ke sisi client 
-        # karena bisa membocorkan struktur folder / path / nama variabel di server.
+        # [SECURITY FIX] 3. Prevent Information Leakage
+        # Avoid sending detailed Python error messages (str(e)) to the client-side 
+        # as it could leak folder structures / paths / variable names on the server.
         print(f"Error during prediction: {e}")
-        raise HTTPException(status_code=400, detail="Terjadi kesalahan saat memproses gambar.")
+        raise HTTPException(status_code=400, detail="An error occurred while processing the image.")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
+

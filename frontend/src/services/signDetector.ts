@@ -7,24 +7,24 @@ import { DetectionResult, SignStandard } from '../types';
 
 /**
  * ============================================================================
- * KONFIGURASI API BACKEND DETEKSI BAHASA ISYARAT
+ * SIGN LANGUAGE DETECTION BACKEND API CONFIGURATION
  * ============================================================================
- * Ganti URL di bawah ini dengan alamat server backend REST API Anda saat
- * model machine learning / FastAPI / Flask Anda sudah siap beroperasi.
- * Contoh: "http://localhost:8000/api/predict" atau "https://api.project-anda.com/predict"
+ * Replace the URL below with your backend REST API server address when
+ * your machine learning / FastAPI / Flask model is ready for deployment.
+ * Example: "http://localhost:8000/api/predict" or "https://api.your-project.com/predict"
  */
 export const API_URL = "http://127.0.0.1:8000/predict";
 
 /**
- * Catatan Privasi & Keamanan:
- * - Pada implementasi default browser/on-device (MediaPipe / TensorFlow.js / ONNX Web),
- *   seluruh data citra video diproses di memori lokal perangkat pengguna.
- * - Jika menggunakan backend server mandiri (API_URL di atas), frame hanya dikirim
- *   secara terenkripsi (HTTPS/WSS) untuk inferensi langsung tanpa disimpan di database.
+ * Privacy & Security Note:
+ * - In default browser/on-device implementations (MediaPipe / TensorFlow.js / ONNX Web),
+ *   all video image data is processed locally in the user's device memory.
+ * - If using a standalone backend server (API_URL above), frames are only sent
+ *   encrypted (HTTPS/WSS) for direct inference without being saved in a database.
  */
-export const PRIVACY_STATEMENT = "Video kamera Anda diproses langsung di perangkat peramban secara lokal dan tidak pernah direkam atau disimpan di server mana pun demi melindungi privasi Anda sepenuhnya.";
+export const PRIVACY_STATEMENT = "Your camera video is processed locally and is never recorded or stored on any server, ensuring complete privacy.";
 
-// Database isyarat untuk simulasi realistis dan referensi model
+// Sign database for realistic simulation and model reference
 export const KNOWN_SIGNS: Array<{
   text: string;
   label: string;
@@ -99,7 +99,7 @@ export const KNOWN_SIGNS: Array<{
   }
 ];
 
-// Helper: Menghasilkan jitter koordinat 21 titik agar visualisasi canvas bergerak dinamis
+// Helper: Generates 21-point coordinate jitter so the canvas visualization moves dynamically
 export function generateDynamicLandmarks(baseX = 150, baseY = 150, variance = 6) {
   const points = [
     { x: baseX, y: baseY + 90 },           // 0: Wrist
@@ -125,7 +125,7 @@ export function generateDynamicLandmarks(baseX = 150, baseY = 150, variance = 6)
     { x: baseX + 78, y: baseY - 68 },      // 20: Pinky Tip
   ];
 
-  // Tambahkan sedikit noise acak natural
+  // Add a bit of natural random noise
   return points.map(pt => ({
     x: Math.round(pt.x + (Math.random() - 0.5) * variance),
     y: Math.round(pt.y + (Math.random() - 0.5) * variance),
@@ -135,16 +135,16 @@ export function generateDynamicLandmarks(baseX = 150, baseY = 150, variance = 6)
 
 /**
  * ============================================================================
- * FUNGSI UTAMA DETEKSI ISYARAT: detectSign(frame)
+ * MAIN SIGN DETECTION FUNCTION: detectSign(frame)
  * ============================================================================
- * Fungsi ini menerima frame dari `<video>` atau `<canvas>` dan mengembalikan
- * objek DetectionResult.
+ * This function receives a frame from `<video>` or `<canvas>` and returns
+ * a DetectionResult object.
  *
- * CARA MENGGANTI DENGAN REST API ASLI:
- * 1. Aktifkan blok fetch di bawah komentar [REAL API CODE].
- * 2. Ambil snapshot frame dalam bentuk Base64 JPEG atau FormData (Blob).
- * 3. Kirim via HTTP POST ke API_URL Anda.
- * 4. Petakan respon JSON dari server Anda ke interface DetectionResult.
+ * HOW TO REPLACE WITH A REAL REST API:
+ * 1. Activate the fetch block below the [REAL API CODE] comment.
+ * 2. Take a frame snapshot in Base64 JPEG or FormData (Blob) format.
+ * 3. Send via HTTP POST to your API_URL.
+ * 4. Map the JSON response from your server to the DetectionResult interface.
  */
 export async function detectSign(
   frameSource?: HTMLVideoElement | HTMLCanvasElement | ImageData | null,
@@ -165,7 +165,7 @@ export async function detectSign(
       base64Image = dataUrl.split(",")[1];
     } else {
       return {
-        signText: "Menunggu gerakan...",
+        signText: "Waiting for movement...",
         confidence: 0,
         standard: activeStandard,
         handDetected: false,
@@ -191,16 +191,16 @@ export async function detectSign(
 
     const data = await response.json();
     return {
-      signText: data.predicted_label === "Menunggu gerakan..." ? "" : data.predicted_label,
-      confidence: data.confidence, // Rentang 0.0 - 1.0
+      signText: data.predicted_label === "Waiting for movement..." ? "" : data.predicted_label,
+      confidence: data.confidence, // Range 0.0 - 1.0
       standard: "BISINDO",
       handDetected: data.confidence > 0,
       timestamp: Date.now()
     };
   } catch (error) {
-    console.error("Gagal melakukan inferensi ke API:", error);
+    console.error("Failed to perform inference to API:", error);
     return {
-      signText: "Koneksi API Gagal",
+      signText: "API Connection Failed",
       confidence: 0,
       standard: "BISINDO",
       handDetected: false,
@@ -208,4 +208,5 @@ export async function detectSign(
     };
   }
 }
+
 
