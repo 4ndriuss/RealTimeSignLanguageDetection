@@ -25,8 +25,8 @@ while cap.isOpened():
     # 2. Gambar titik & garis di layar
     draw_styled_landmarks(image, results)
     
-    # 3. Ekstrak keypoints
-    keypoints = extract_keypoints(results)
+    # 3. Ekstrak keypoints (the frame shape is required by the extractor)
+    keypoints = extract_keypoints(results, image.shape)
     print("Ukuran Keypoints:", keypoints.shape)
 
     cv2.imshow('Uji Coba MediaPipe Tasks (Python 3.12)', image)
