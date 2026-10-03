@@ -24,6 +24,18 @@ label_map = {label: num for num, label in enumerate(actions)}
 
 print(f"Detected {len(actions)} gesture classes: {actions}")
 
+# Konfigurasi jumlah tangan yang diharapkan untuk tiap kelas.
+# Silakan sesuaikan dengan isyarat BISINDO (contoh: 'A' butuh 2 tangan, 'B' butuh 1).
+# Jika kelas tidak ada di dictionary ini, semua jumlah deteksi tangan akan diterima.
+EXPECTED_HANDS = {
+    'A': 2, 'B': 2, 'C': 1, 'D': 2, 'E': 1,
+    'F': 1, 'G': 2, 'H': 2, 'I': 1, 'J': 1,
+    'K': 2, 'L': 1, 'M': 2, 'N': 1, 'O': 1,
+    'P': 1, 'Q': 2, 'R': 1, 'S': 2, 'T': 2,
+    'U': 1, 'V': 1, 'W': 2, 'X': 2, 'Y': 1,
+    'Z': 1
+}
+
 # Initialize MediaPipe Tasks
 # A lower confidence (0.3) is used for static dataset images: on a sample of
 # 400 images it raised the hand detection rate from ~80% to ~84%, recovering
@@ -57,11 +69,18 @@ for action in actions:
         # Hand landmark detection
         _, results = mediapipe_detection(image, landmarker)
         
+        # Filter berdasarkan jumlah tangan yang terdeteksi vs yang diharapkan
+        detected_hands = len(results.hand_landmarks) if results.hand_landmarks else 0
+        expected = EXPECTED_HANDS.get(action, detected_hands)
+        
+        if detected_hands == 0 or detected_hands != expected:
+            continue
+            
         # Extract NUM_FEATURES (128) normalized features; the image shape is
         # required to correct for MediaPipe's per-axis normalization.
         keypoints = extract_keypoints(results, image.shape)
         
-        # Save if any hand is detected (keypoints are not all zeros)
+        # Save if keypoints are successfully extracted
         if np.any(keypoints):
             X.append(keypoints)
             y.append(label_map[action])

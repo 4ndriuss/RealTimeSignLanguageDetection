@@ -27,7 +27,6 @@ X = np.load(os.path.join(INPUT_DIR, 'X.npy'))
 y = np.load(os.path.join(INPUT_DIR, 'y.npy'))
 actions = np.load(os.path.join(INPUT_DIR, 'actions.npy'))
 
-# Guard against stale preprocessed data from the old 126-feature format.
 if X.shape[1] != NUM_FEATURES:
     raise ValueError(
         f"X.npy has {X.shape[1]} features but {NUM_FEATURES} are expected. "
@@ -39,86 +38,97 @@ print(f"Loaded {len(X)} raw samples from {num_classes} classes.")
 
 
 def mirror_keypoints(features):
-    """Return the horizontally mirrored version of one feature vector.
-
-    Mirroring turns a left hand into a right hand, so the two hand slots are
-    swapped and every x coordinate is negated. For the inter-hand vector
-    (left wrist -> right wrist) the swap cancels the x negation but flips the
-    sign of y.
-
-    Why: for one-handed BISINDO letters (C, E, I, L, O, R, U, V, Z) the
-    dataset is split roughly 50/50 between left and right hands, which land in
-    different feature slots. Mirroring lets every sample teach both slots,
-    effectively doubling the data per letter and supporting left-handed users.
-    """
+    """Return the horizontally mirrored version of one feature vector."""
     lh = features[:HAND_FEATURES].reshape(-1, 3).copy()
     rh = features[HAND_FEATURES:2 * HAND_FEATURES].reshape(-1, 3).copy()
-    inter = features[2 * HAND_FEATURES:].copy()
+    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + 25].copy()
+    n_hands = features[-1]
 
+    # Negasi X (karena dicerminkan secara horizontal)
     lh[:, 0] *= -1
     rh[:, 0] *= -1
-    inter[1] *= -1
 
-    # Old right hand becomes the new left hand and vice versa.
-    return np.concatenate([rh.flatten(), lh.flatten(), inter])
+    # Memperbaiki BUG Kritis:
+    # inter adalah flattened 5x5 matriks jarak antar ujung jari.
+    # Jika tangan kiri dan kanan ditukar, matriks jarak harus di-transpose.
+    inter = inter.reshape(5, 5).T.flatten()
+
+    # Tangan kanan lama menjadi tangan kiri baru, dan sebaliknya
+    return np.concatenate([rh.flatten(), lh.flatten(), inter, [n_hands]])
 
 
-def augment_keypoints_static(X_data, y_data, copies=20):
-    """Augment wrist-relative, scale-normalized keypoints.
+def augment_single(features):
+    """Augment a single feature vector."""
+    # Mirroring (50% probabilitas)
+    if np.random.rand() < 0.5:
+        features = mirror_keypoints(features)
 
-    Each copy gets: an optional mirror (50%), a random in-plane rotation, a
-    small scale jitter and Gaussian noise. The same rotation/scale is applied
-    to both hands and to the inter-hand vector so the gesture stays coherent.
-    Missing hands (all-zero rows) are left untouched.
-    """
-    X_aug, y_aug = [], []
-    for keypoints, label in zip(X_data, y_data):
-        # Add original data
-        X_aug.append(keypoints)
-        y_aug.append(label)
+    pts = features[:2 * HAND_FEATURES].reshape(-1, 3).copy()
+    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + 25].copy()
+    n_hands = features[-1]
+    
+    mask = np.any(pts != 0, axis=1)
+    
+    # Random rotasi 2D (+/- 15 derajat)
+    theta = np.random.uniform(-np.pi/12, np.pi/12)
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
+    
+    scale = np.random.uniform(0.9, 1.1)
+    
+    if np.any(mask):
+        # Rotasi dan Skala diterapkan pada koordinat titik
+        pts[mask] = np.dot(pts[mask] * scale, R.T)
+        # Noise Gaussian kecil
+        pts[mask] += np.random.normal(0, 0.015, size=pts[mask].shape)
+
+    # BUG DIPERBAIKI: inter adalah jarak skalar (distance), bukan vektor.
+    # Jarak tidak bisa dirotasi dengan matriks 2D, hanya bisa diskala.
+    if np.any(inter):
+        inter = inter * scale
         
-        # Create augmented variations
-        for _ in range(copies):
-            features = keypoints.copy()
-            if np.random.rand() < 0.5:
-                features = mirror_keypoints(features)
-
-            pts = features[:2 * HAND_FEATURES].reshape(-1, 3)
-            inter = features[2 * HAND_FEATURES:]
-            mask = np.any(pts != 0, axis=1)
-            
-            # Random rotation (+/- 15 degrees around the camera axis)
-            theta = np.random.uniform(-np.pi/12, np.pi/12)
-            c, s = np.cos(theta), np.sin(theta)
-            R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
-            
-            # Small scale jitter. Large scale changes are no longer needed
-            # because features are already normalized by hand size; this only
-            # simulates landmark-estimation wobble in bone proportions.
-            scale = np.random.uniform(0.9, 1.1)
-            
-            if np.any(mask):
-                pts[mask] = np.dot(pts[mask] * scale, R.T)
-                
-                # Light Gaussian noise. Units are now "hand sizes"
-                # (wrist -> middle MCP = 1.0), so 0.015 is roughly the old
-                # 0.003 in normalized image units for a typical hand.
-                pts[mask] += np.random.normal(0, 0.015, size=pts[mask].shape)
-
-            if np.any(inter):
-                inter = np.dot(inter * scale, R[:2, :2].T)
-                
-            X_aug.append(np.concatenate([pts.flatten(), inter]))
-            y_aug.append(label)
-            
-    return np.array(X_aug), np.array(y_aug)
+    return np.concatenate([pts.flatten(), inter, [n_hands]])
 
 
-# 2. Train / Validation / Test split (70 / 15 / 15), BEFORE augmentation to
-# prevent data leakage. A separate validation set drives EarlyStopping and
-# ReduceLROnPlateau so that the test set stays completely unseen until the
-# final evaluation; previously the test set doubled as validation data, which
-# made the reported test accuracy optimistic.
+# Custom Keras Sequence untuk Augmentasi On-The-Fly (Hemat RAM & Dinamis)
+class AugmentDataGenerator(tf.keras.utils.Sequence):
+    def __init__(self, X, y, batch_size=128, copies_per_epoch=20):
+        self.X = X
+        self.y = y
+        self.batch_size = batch_size
+        self.copies = copies_per_epoch
+        # Memperpanjang epoch secara virtual agar setara dengan dataset statis sebelumnya
+        self.virtual_length = len(self.X) * self.copies
+        self.indices = np.arange(len(self.X))
+        np.random.shuffle(self.indices)
+        
+    def __len__(self):
+        return int(np.ceil(self.virtual_length / self.batch_size))
+        
+    def __getitem__(self, index):
+        # Ambil sampel (mengulang dataset jika indeks melebihi jumlah asli)
+        real_index = (index * self.batch_size) % len(self.X)
+        
+        batch_indices = self.indices[real_index:real_index+self.batch_size]
+        # Jika berada di ujung array, ambil sisanya dengan me-loop dari depan
+        if len(batch_indices) < self.batch_size:
+            diff = self.batch_size - len(batch_indices)
+            batch_indices = np.concatenate([batch_indices, self.indices[:diff]])
+            
+        X_batch = self.X[batch_indices].copy()
+        y_batch = self.y[batch_indices]
+        
+        # Terapkan augmentasi secara online per sampel dalam batch
+        for i in range(len(X_batch)):
+            X_batch[i] = augment_single(X_batch[i])
+            
+        return X_batch, y_batch
+        
+    def on_epoch_end(self):
+        np.random.shuffle(self.indices)
+
+
+# 2. Train / Validation / Test split (70 / 15 / 15)
 X_train_raw, X_temp, y_train_raw, y_temp = train_test_split(
     X, y, test_size=0.3, random_state=SEED, stratify=y
 )
@@ -126,28 +136,22 @@ X_val, X_test, y_val_raw, y_test_raw = train_test_split(
     X_temp, y_temp, test_size=0.5, random_state=SEED, stratify=y_temp
 )
 
-print("Performing Data Augmentation...")
-# Significantly multiply the training data
-X_train, y_train_aug = augment_keypoints_static(X_train_raw, y_train_raw, copies=20)
-# Validation & testing data remain unaugmented
-
-print(f"Training samples after Augmentation: {len(X_train)}")
-print(f"Validation samples: {len(X_val)}")
-print(f"Testing samples: {len(X_test)}")
-
 # 3. One-hot encoding
-y_train = to_categorical(y_train_aug, num_classes=num_classes)
+y_train_raw_cat = to_categorical(y_train_raw, num_classes=num_classes)
 y_val = to_categorical(y_val_raw, num_classes=num_classes)
 y_test = to_categorical(y_test_raw, num_classes=num_classes)
 
-# Class weights compensate for the mild imbalance in extracted samples
-# (e.g. 'Y' has ~230 samples vs. ~440 for 'M') so rare letters are not
-# under-predicted. Augmentation multiplies every class equally, so weights
-# computed on the raw training labels remain valid.
+print("Preparing Data Generators (Online Augmentation)...")
+train_generator = AugmentDataGenerator(X_train_raw, y_train_raw_cat, batch_size=128, copies_per_epoch=20)
+
+print(f"Base Training samples (will be augmented on-the-fly): {len(X_train_raw)}")
+print(f"Validation samples: {len(X_val)}")
+print(f"Testing samples: {len(X_test)}")
+
 weights = compute_class_weight('balanced', classes=np.arange(num_classes), y=y_train_raw)
 class_weight = dict(enumerate(weights))
 
-# 4. Build Model Architecture (Dense/Static)
+# 4. Build Model Architecture
 model = Sequential([
     Input(shape=(NUM_FEATURES,)),
     Dense(256, activation='relu'),
@@ -173,7 +177,6 @@ model.compile(
     metrics=['accuracy']
 )
 
-# Callbacks (monitor the validation set, never the test set)
 callbacks = [
     ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=0.00001, verbose=1),
     EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True, verbose=1)
@@ -182,24 +185,20 @@ callbacks = [
 # 5. Train Model
 print("\nStarting Model Training...")
 history = model.fit(
-    X_train, y_train,
+    train_generator,
     epochs=120,
-    # Larger batch: with ~130k augmented samples, 32 makes each epoch slow
-    # without a meaningful accuracy benefit.
-    batch_size=128,
     validation_data=(X_val, y_val),
     class_weight=class_weight,
     callbacks=callbacks,
     verbose=1
 )
 
-# 6. Evaluate Model (on the held-out test set, untouched during training)
+# 6. Evaluate Model
 test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
-print(f"\n--- Final Evaluation (Optimized Model) ---")
+print(f"\n--- Final Evaluation ---")
 print(f"Test Accuracy: {test_acc * 100:.2f}%")
 print(f"Test Loss    : {test_loss:.4f}")
 
-# Per-class precision/recall to spot letters that are frequently confused.
 y_pred = np.argmax(model.predict(X_test, verbose=0), axis=1)
 print("\nPer-class report (test set):")
 print(classification_report(y_test_raw, y_pred, target_names=[str(a) for a in actions], digits=3))

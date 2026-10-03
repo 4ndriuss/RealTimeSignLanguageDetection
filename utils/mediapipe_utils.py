@@ -5,7 +5,7 @@ import urllib.request
 import mediapipe as mp
 
 # Path to save the hand landmarker model file
-MODEL_DIR = os.path.dirname(__file__)
+MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(MODEL_DIR, 'hand_landmarker.task')
 MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
 
@@ -75,15 +75,13 @@ def draw_styled_landmarks(image, results):
                 cv2.circle(image, (cx, cy), 4, (0, 255, 0), -1)
 
 # --- Feature layout -------------------------------------------------------
-# [  0: 63]  left hand  : 21 landmarks x (x, y, z), wrist-relative, scale-normalized
-# [ 63:126]  right hand : 21 landmarks x (x, y, z), wrist-relative, scale-normalized
-# [126:128]  inter-hand : (dx, dy) vector from left wrist to right wrist,
-#                         normalized by the mean hand size (zeros unless both
-#                         hands are visible)
-# Any missing hand is encoded as zeros.
+# [  0: 63]  Tangan 1 (paling kiri di layar): 21 landmarks x (x, y, z), dinormalisasi
+# [ 63:126]  Tangan 2 (paling kanan di layar): 21 landmarks x (x, y, z), dinormalisasi
+# [126:151]  Inter-hand: 25 fitur jarak antar 5 ujung jari tangan 1 ke 5 ujung jari tangan 2
+# [151]      Jumlah tangan yang terdeteksi (n)
 HAND_FEATURES = 21 * 3
-INTER_FEATURES = 2
-NUM_FEATURES = 2 * HAND_FEATURES + INTER_FEATURES
+INTER_FEATURES = 25
+NUM_FEATURES = 2 * HAND_FEATURES + INTER_FEATURES + 1
 
 # Landmark used as the hand-size reference (wrist -> middle finger MCP).
 # This bone is rigid, so its length is a stable proxy for how big the hand
@@ -104,53 +102,55 @@ def _landmarks_to_pixels(hand_landmarks, width, height):
 
 
 def extract_keypoints(results, image_shape):
-    """Extract NUM_FEATURES (128) left & right hand features.
+    """Extract NUM_FEATURES (152) spatial (left-to-right) features.
 
     Args:
         results: HandLandmarkerResult returned by `mediapipe_detection`.
-        image_shape: Shape of the processed image (`image.shape`), needed to
-            undo MediaPipe's per-axis normalization.
+        image_shape: Shape of the processed image (`image.shape`).
 
     Returns:
         1-D float array of length NUM_FEATURES (see layout above).
     """
     height, width = image_shape[:2]
-    hands = {}  # 'Left' / 'Right' -> (normalized keypoints, wrist position, hand size)
-
-    if results.hand_landmarks and results.handedness:
-        for hand_landmarks, handedness in zip(results.hand_landmarks, results.handedness):
-            label = handedness[0].category_name
-            if label in hands:
-                # Rare case (~0.5% of the dataset): MediaPipe labels both hands
-                # with the same side. Keep the first one instead of silently
-                # overwriting it.
-                continue
-
-            pts = _landmarks_to_pixels(hand_landmarks, width, height)
-
-            # Translation invariance: make the wrist (landmark 0) the origin.
-            wrist = pts[0].copy()
-            pts -= wrist
-
-            # Scale invariance: divide by the wrist -> middle-MCP distance so
-            # the features no longer depend on how close the hand is to the
-            # camera or on the image resolution.
-            hand_size = np.linalg.norm(pts[SCALE_LANDMARK, :2])
-            if hand_size < 1e-6:
-                continue
-            pts /= hand_size
-
-            hands[label] = (pts.flatten(), wrist, hand_size)
-
-    lh = hands['Left'][0] if 'Left' in hands else np.zeros(HAND_FEATURES)
-    rh = hands['Right'][0] if 'Right' in hands else np.zeros(HAND_FEATURES)
-
-    # Relative position between the two hands. Each hand above is centered on
-    # its own wrist, which throws away where the hands are relative to each
-    # other -- important for two-handed BISINDO letters (A, D, G, K, Q, ...).
-    inter = np.zeros(INTER_FEATURES)
-    if 'Left' in hands and 'Right' in hands:
-        mean_size = (hands['Left'][2] + hands['Right'][2]) / 2
-        inter = (hands['Right'][1][:2] - hands['Left'][1][:2]) / mean_size
-
-    return np.concatenate([lh, rh, inter])
+    hands = []
+    
+    if results.hand_landmarks:
+        for hl in results.hand_landmarks[:2]:
+            hands.append(_landmarks_to_pixels(hl, width, height))
+            
+    n = len(hands)
+    if n == 0:
+        return np.zeros(NUM_FEATURES)
+        
+    # Urutkan secara spasial (kiri ke kanan di frame) berdasarkan X pergelangan tangan (landmark 0)
+    hands.sort(key=lambda k: k[0, 0])
+    
+    # Hitung rata-rata ukuran tulang telapak (wrist ke middle MCP) sebagai skala penormal
+    # Ini menyelesaikan masalah "shrinkage" jika kedua tangan direntangkan jauh.
+    scales = [np.linalg.norm(k[SCALE_LANDMARK, :2] - k[0, :2]) for k in hands]
+    # Hindari division by zero
+    valid_scales = [s for s in scales if s > 1e-6]
+    global_scale = np.mean(valid_scales) if valid_scales else 1.0
+    
+    # Hitung titik tengah gabungan (origin)
+    pts = np.concatenate(hands)
+    origin = pts.mean(axis=0)
+    
+    # Buat wadah untuk 2 tangan
+    out = np.zeros((2, 21, 3))
+    for i, k in enumerate(hands):
+        out[i] = (k - origin) / global_scale
+        
+    # 25 Fitur Jarak Antar Ujung Jari
+    extra = []
+    if n == 2:
+        tips = [4, 8, 12, 16, 20]
+        a, b = out[0][tips], out[1][tips]
+        # Jarak pairwise antara 5 ujung jari tangan 1 dengan 5 ujung jari tangan 2
+        extra = np.linalg.norm(a[:, None] - b[None], axis=2).flatten()
+    
+    # Pad dengan nol jika kurang dari 2 tangan
+    extra = np.pad(extra, (0, 25 - len(extra)))
+    
+    # Gabungkan menjadi 1D array (total 152 fitur)
+    return np.concatenate([out.flatten(), extra, [n]])
