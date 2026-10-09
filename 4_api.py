@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
@@ -7,9 +7,8 @@ import numpy as np
 import base64
 import tensorflow as tf
 import os
-import collections
 
-from utils.mediapipe_utils import create_landmarker, mediapipe_detection, extract_keypoints, NUM_FEATURES
+from utils.mediapipe_utils import create_landmarker, mediapipe_detection, extract_keypoints
 
 app = FastAPI(title="BISINDO Sign Language API")
 
