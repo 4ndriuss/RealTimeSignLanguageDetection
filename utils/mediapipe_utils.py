@@ -1,6 +1,5 @@
 import os
 import cv2
-import numpy as np
 import urllib.request
 import mediapipe as mp
 
@@ -74,83 +73,12 @@ def draw_styled_landmarks(image, results):
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 cv2.circle(image, (cx, cy), 4, (0, 255, 0), -1)
 
-# --- Feature layout -------------------------------------------------------
-# [  0: 63]  Hand 1 (leftmost on screen): 21 landmarks x (x, y, z), normalized
-# [ 63:126]  Hand 2 (rightmost on screen): 21 landmarks x (x, y, z), normalized
-# [126:151]  Inter-hand: 25 distance features between 5 fingertips of Hand 1 and 5 fingertips of Hand 2
-# [151]      Number of detected hands (n)
-HAND_FEATURES = 21 * 3
-INTER_FEATURES = 25
-NUM_FEATURES = 2 * HAND_FEATURES + INTER_FEATURES + 1
-
-# Landmark used as the hand-size reference (wrist -> middle finger MCP).
-# This bone is rigid, so its length is a stable proxy for how big the hand
-# appears in the frame, regardless of the gesture being made.
-SCALE_LANDMARK = 9
-
-
-def _landmarks_to_pixels(hand_landmarks, width, height):
-    """Convert MediaPipe normalized landmarks to an aspect-correct (21, 3) array.
-
-    MediaPipe normalizes x by image width and y by image height, so on a
-    non-square frame (e.g. a 640x480 webcam vs. the 640x640 dataset images)
-    the same hand pose would yield different numbers. Scaling back to pixels
-    removes that distortion. z uses roughly the same scale as x per the
-    MediaPipe docs, so it is scaled by the width as well.
-    """
-    return np.array([[lm.x * width, lm.y * height, lm.z * width] for lm in hand_landmarks])
-
-
-def extract_keypoints(results, image_shape):
-    """Extract NUM_FEATURES (152) spatial (left-to-right) features.
-
-    Args:
-        results: HandLandmarkerResult returned by `mediapipe_detection`.
-        image_shape: Shape of the processed image (`image.shape`).
-
-    Returns:
-        1-D float array of length NUM_FEATURES (see layout above).
-    """
-    height, width = image_shape[:2]
-    hands = []
-    
-    if results.hand_landmarks:
-        for hl in results.hand_landmarks[:2]:
-            hands.append(_landmarks_to_pixels(hl, width, height))
-            
-    n = len(hands)
-    if n == 0:
-        return np.zeros(NUM_FEATURES)
-        
-    # Sort spatially (left to right in the frame) based on the X coordinate of the wrist (landmark 0)
-    hands.sort(key=lambda k: k[0, 0])
-    
-    # Calculate the average palm bone size (wrist to middle MCP) as a normalization scale
-    # This solves the "shrinkage" problem if both hands are stretched far apart.
-    scales = [np.linalg.norm(k[SCALE_LANDMARK, :2] - k[0, :2]) for k in hands]
-    # Hindari division by zero
-    valid_scales = [s for s in scales if s > 1e-6]
-    global_scale = np.mean(valid_scales) if valid_scales else 1.0
-    
-    # Hitung titik tengah gabungan (origin)
-    pts = np.concatenate(hands)
-    origin = pts.mean(axis=0)
-    
-    # Create a container for 2 hands
-    out = np.zeros((2, 21, 3))
-    for i, k in enumerate(hands):
-        out[i] = (k - origin) / global_scale
-        
-    # 25 Fitur Jarak Antar Ujung Jari
-    extra = []
-    if n == 2:
-        tips = [4, 8, 12, 16, 20]
-        a, b = out[0][tips], out[1][tips]
-        # Jarak pairwise antara 5 ujung jari tangan 1 dengan 5 ujung jari tangan 2
-        extra = np.linalg.norm(a[:, None] - b[None], axis=2).flatten()
-    
-    # Pad with zeros if there are less than 2 hands
-    extra = np.pad(extra, (0, 25 - len(extra)))
-    
-    # Gabungkan menjadi 1D array (total 152 fitur)
-    return np.concatenate([out.flatten(), extra, [n]])
+# Feature extraction is pure NumPy and lives in `utils/features.py` (so the
+# API can use it without MediaPipe). Re-exported for backward compatibility.
+from utils.features import (  # noqa: E402,F401
+    HAND_FEATURES,
+    INTER_FEATURES,
+    NUM_FEATURES,
+    SCALE_LANDMARK,
+    extract_keypoints,
+)

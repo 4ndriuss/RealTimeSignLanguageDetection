@@ -1,39 +1,35 @@
 import os
 import cv2
-import glob
 from collections import Counter, defaultdict
-import kagglehub
+from utils.config import DATASET_HAND_CONFIDENCE, DATASET_SPLITS, get_images_dir, list_class_images
 from utils.mediapipe_utils import create_landmarker, mediapipe_detection
 
 print("Auditing Dataset to find the dominant number of hands per class...")
 
 # Ensure the dataset is downloaded (uses cache if already present)
-path = kagglehub.dataset_download("agungmrf/indonesian-sign-language-bisindo")
-IMAGES_DIR = os.path.join(path, 'bisindo', 'images')
-SPLITS = ['train', 'val']
-
-landmarker = create_landmarker(min_confidence=0.3)
-stats = defaultdict(Counter)
-
+IMAGES_DIR = get_images_dir()
 print(f"Searching for images in: {IMAGES_DIR}")
 
-# Process all images in train and val splits
-for split in SPLITS:
-    split_dir = os.path.join(IMAGES_DIR, split)
-    if not os.path.isdir(split_dir):
-        continue
-        
-    image_paths = glob.glob(f'{split_dir}/*/*.jpg')
-    print(f"Processing {len(image_paths)} images in '{split}' split...")
-    
-    for path in image_paths:
-        label = os.path.basename(os.path.dirname(path))
-        img = cv2.imread(path)
+# Same detector settings as 1_preprocess_dataset.py, so the audit reflects
+# exactly what preprocessing will see.
+landmarker = create_landmarker(min_confidence=DATASET_HAND_CONFIDENCE)
+stats = defaultdict(Counter)
+
+# Classes are the sub-folders of the train split (A-Z)
+train_dir = os.path.join(IMAGES_DIR, DATASET_SPLITS[0])
+labels = sorted(f for f in os.listdir(train_dir) if os.path.isdir(os.path.join(train_dir, f)))
+
+# Process all images of every class across the train and val splits
+for label in labels:
+    image_paths = list_class_images(IMAGES_DIR, label)
+    print(f"Processing class '{label}' ({len(image_paths)} images)...")
+
+    for img_path in image_paths:
+        img = cv2.imread(img_path)
         if img is None:
             continue
-            
+
         _, res = mediapipe_detection(img, landmarker)
-        
         n_hands = len(res.hand_landmarks) if res.hand_landmarks else 0
         stats[label][n_hands] += 1
 

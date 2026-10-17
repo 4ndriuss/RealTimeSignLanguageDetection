@@ -10,11 +10,8 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import cdist
-from utils.mediapipe_utils import HAND_FEATURES, INTER_FEATURES, NUM_FEATURES
-
-# Data & model paths
-INPUT_DIR = 'preprocessed_data'
-MODEL_DIR = 'models'
+from utils.config import ACTIONS_PATH, MODEL_PATH, MODELS_DIR, X_PATH, Y_PATH
+from utils.features import HAND_FEATURES, INTER_FEATURES, NUM_FEATURES
 
 # Fixed seed so that splits and augmentation are reproducible between runs.
 SEED = 42
@@ -28,13 +25,12 @@ tf.random.set_seed(SEED)
 # between train and test, otherwise the test accuracy is inflated.
 NEAR_DUP_THRESHOLD = 0.02
 
-if not os.path.exists(MODEL_DIR):
-    os.makedirs(MODEL_DIR)
+os.makedirs(MODELS_DIR, exist_ok=True)
 
 # 1. Load Data
-X = np.load(os.path.join(INPUT_DIR, 'X.npy'))
-y = np.load(os.path.join(INPUT_DIR, 'y.npy'))
-actions = np.load(os.path.join(INPUT_DIR, 'actions.npy'))
+X = np.load(X_PATH)
+y = np.load(Y_PATH)
+actions = np.load(ACTIONS_PATH)
 
 if X.shape[1] != NUM_FEATURES:
     raise ValueError(
@@ -124,7 +120,7 @@ def augment_single(features):
         features = mirror_keypoints(features)
 
     pts = features[:2 * HAND_FEATURES].reshape(-1, 3).copy()
-    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + 25].copy()
+    inter = features[2 * HAND_FEATURES:2 * HAND_FEATURES + INTER_FEATURES].copy()
     n_hands = features[-1]
     
     mask = np.any(pts != 0, axis=1)
@@ -268,6 +264,5 @@ print("\nPer-class report (test set):")
 print(classification_report(y_test_raw, y_pred, target_names=[str(a) for a in actions], digits=3))
 
 # 7. Save Model
-model_save_path = os.path.join(MODEL_DIR, 'sign_language_model.keras')
-model.save(model_save_path)
-print(f"\nOptimized model successfully saved at: '{model_save_path}'!")
+model.save(MODEL_PATH)
+print(f"\nOptimized model successfully saved at: '{MODEL_PATH}'!")

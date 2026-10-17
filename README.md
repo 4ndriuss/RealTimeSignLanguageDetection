@@ -66,7 +66,7 @@ To run this system from scratch (from preprocessing to real-time detection), fol
 ```bash
 python 1_preprocess_dataset.py
 ```
-**Function:** This script automatically downloads the [Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo) dataset via `kagglehub` (cached after the first download, ~1.4 GB) and reads all images from its `train` and `val` splits (folders A–Z). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 128 feature values) as a `.npy` file in the `preprocessed_data/` folder.
+**Function:** This script automatically downloads the [Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo) dataset via `kagglehub` (cached after the first download, ~1.4 GB) and reads all images from its `train` and `val` splits (folders A–Z). MediaPipe will track the hand skeletal landmarks and save them as a normalized coordinate matrix (a row vector containing 152 feature values) as a `.npy` file in the `preprocessed_data/` folder.
 
 ### Step 2: Model Training
 ```bash
@@ -82,7 +82,7 @@ python 3_realtime_detection.py
 *(Press the **Q key** on your keyboard while the video window is active to exit and turn off the camera.)*
 
 ### Step 4: Web Application Interface (IsyaratKita)
-This project includes a modern React web interface (in the `frontend/` folder) that communicates with a FastAPI Python backend (`4_api.py`).
+This project includes a modern React web interface (in the `frontend/` folder) that runs MediaPipe HandLandmarker directly in the browser (WASM/WebGL) and sends only the 152 extracted features per frame to the FastAPI Python backend (`4_api.py`).
 
 1. **Start the Backend API:**
    Double-click `start_api.bat` or run the following in your terminal:
@@ -98,7 +98,7 @@ This project includes a modern React web interface (in the `frontend/` folder) t
    npm install --legacy-peer-deps
    npm run dev
    ```
-   *Open `http://localhost:5173` in your browser.*
+   *Open `http://localhost:3000` in your browser.*
 
 ---
 
@@ -107,16 +107,20 @@ This project includes a modern React web interface (in the `frontend/` folder) t
 ```text
 RealTimeSignLanguageDetection/
 │
-├── frontend/               # React + Vite Web Interface
+├── frontend/               # React + Vite Web Interface (in-browser MediaPipe)
 ├── preprocessed_data/      # Destination for extracted coordinate points (.npy)
 ├── models/                 # Destination for the trained Keras model (.keras)
 ├── utils/
-│   └── mediapipe_utils.py  # MediaPipe tracking utility script
+│   ├── config.py           # Shared paths, dataset & inference constants
+│   ├── features.py         # Pure-NumPy 152-feature extraction
+│   ├── mediapipe_utils.py  # MediaPipe tracking & drawing helpers
+│   └── predictor.py        # Shared Keras model loader, validator & smoother
 │
+├── 0_audit_dataset.py      # Audits dominant hand count per BISINDO class
 ├── 1_preprocess_dataset.py # Extracts raw images into NumPy matrices
 ├── 2_train_model.py        # Builds & trains the Keras Neural Network
 ├── 3_realtime_detection.py # Displays webcam feed with live predictions (OpenCV)
-├── 4_api.py                # FastAPI Backend for Web Integration
+├── 4_api.py                # FastAPI Backend (/predict/features & /health)
 ├── start_api.bat           # Shortcut to start the backend server
 ├── test_webcam.py          # (Optional) Tests the MediaPipe tracker without AI
 └── README.md
