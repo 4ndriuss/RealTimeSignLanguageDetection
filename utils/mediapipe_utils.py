@@ -73,8 +73,8 @@ def draw_styled_landmarks(image, results):
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 cv2.circle(image, (cx, cy), 4, (0, 255, 0), -1)
 
-# Feature extraction is pure NumPy and lives in `utils/features.py` (so the
-# API can use it without MediaPipe). Re-exported for backward compatibility.
+# Feature extraction is pure NumPy and lives in `utils/features.py` (so
+# training can use it without MediaPipe). Re-exported for convenience.
 from utils.features import (  # noqa: E402,F401
     HAND_FEATURES,
     INTER_FEATURES,

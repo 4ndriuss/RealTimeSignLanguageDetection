@@ -1,6 +1,6 @@
 # Real-Time Sign Language Detection
 
-This project is a real-time, webcam-based sign language detection system that combines **Google MediaPipe** (for hand landmark tracking) and **TensorFlow/Keras** (for Deep Learning gesture classification).
+This project is a real-time, webcam-based sign language detection system, run as a set of Python command-line scripts, that combines **Google MediaPipe** (for hand landmark tracking) and **TensorFlow/Keras** (for Deep Learning gesture classification).
 
 The model is specifically designed to classify static alphabet gestures (such as the A-Z alphabet in Indonesian Sign Language / BISINDO). It has been optimized to be lightweight, robust to hand positioning, and completely flicker-free on the camera feed.
 
@@ -25,7 +25,6 @@ The main libraries used are:
 - `tensorflow`
 - `mediapipe`
 - `scikit-learn`
-- `fastapi`, `uvicorn`, `pydantic` (for Web API)
 
 ---
 
@@ -53,7 +52,7 @@ The main libraries used are:
 3. **Install Requirements**:
    *(If you have a requirements.txt file, run `pip install -r requirements.txt`. Otherwise, run the command below)*
    ```bash
-   pip install opencv-python numpy tensorflow mediapipe scikit-learn kagglehub fastapi uvicorn pydantic
+   pip install opencv-python numpy tensorflow mediapipe scikit-learn kagglehub
    ```
 
 ---
@@ -81,25 +80,6 @@ python 3_realtime_detection.py
 **Function:** Turns on your Webcam! The program will match the hand postures captured from the video against the trained `.keras` model in real-time. The predicted text (Gesture) along with its confidence percentage will appear in the top left corner of the frame.
 *(Press the **Q key** on your keyboard while the video window is active to exit and turn off the camera.)*
 
-### Step 4: Web Application Interface (IsyaratKita)
-This project includes a modern React web interface (in the `frontend/` folder) that runs MediaPipe HandLandmarker directly in the browser (WASM/WebGL) and sends only the 152 extracted features per frame to the FastAPI Python backend (`4_api.py`).
-
-1. **Start the Backend API:**
-   Double-click `start_api.bat` or run the following in your terminal:
-   ```bash
-   python 4_api.py
-   ```
-   *This starts the FastAPI server on `http://127.0.0.1:8000`.*
-
-2. **Start the Frontend Web App:**
-   Open a new terminal and navigate to the `frontend` folder:
-   ```bash
-   cd frontend
-   npm install --legacy-peer-deps
-   npm run dev
-   ```
-   *Open `http://localhost:3000` in your browser.*
-
 ---
 
 ## 📁 Core Directory Structure
@@ -107,7 +87,6 @@ This project includes a modern React web interface (in the `frontend/` folder) t
 ```text
 RealTimeSignLanguageDetection/
 │
-├── frontend/               # React + Vite Web Interface (in-browser MediaPipe)
 ├── preprocessed_data/      # Destination for extracted coordinate points (.npy)
 ├── models/                 # Destination for the trained Keras model (.keras)
 ├── utils/
@@ -120,8 +99,6 @@ RealTimeSignLanguageDetection/
 ├── 1_preprocess_dataset.py # Extracts raw images into NumPy matrices
 ├── 2_train_model.py        # Builds & trains the Keras Neural Network
 ├── 3_realtime_detection.py # Displays webcam feed with live predictions (OpenCV)
-├── 4_api.py                # FastAPI Backend (/predict/features & /health)
-├── start_api.bat           # Shortcut to start the backend server
 ├── test_webcam.py          # (Optional) Tests the MediaPipe tracker without AI
 └── README.md
 ```

@@ -1,13 +1,8 @@
 """Feature extraction shared by preprocessing, training and inference.
 
-This module only depends on NumPy (no MediaPipe / OpenCV), so lightweight
-consumers such as the feature-based API can import the feature constants
-without loading the whole vision stack.
-
-IMPORTANT: `frontend/src/services/features.ts` is a line-by-line TypeScript
-port of `extract_keypoints`. Any change here must be mirrored there (and
-re-verified with `tests/test_feature_parity.py`), otherwise the browser will
-send features the model was not trained on.
+This module only depends on NumPy (no MediaPipe / OpenCV), so consumers such
+as 2_train_model.py can import the feature layout constants without loading
+the whole vision stack.
 """
 import numpy as np
 
