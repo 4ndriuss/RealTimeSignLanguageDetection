@@ -10,7 +10,8 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import cdist
-from utils.config import ACTIONS_PATH, MODEL_PATH, MODELS_DIR, X_PATH, Y_PATH
+from utils.config import ACTIONS_PATH, MODEL_PATH, MODELS_DIR, WEIGHTS_PATH, X_PATH, Y_PATH
+from utils.export import export_weights
 from utils.features import HAND_FEATURES, INTER_FEATURES, NUM_FEATURES
 
 # Fixed seed so that splits and augmentation are reproducible between runs.
@@ -266,3 +267,7 @@ print(classification_report(y_test_raw, y_pred, target_names=[str(a) for a in ac
 # 7. Save Model
 model.save(MODEL_PATH)
 print(f"\nOptimized model successfully saved at: '{MODEL_PATH}'!")
+
+# NumPy weights used by the real-time script (no TensorFlow at inference)
+export_weights(model, WEIGHTS_PATH)
+print(f"Inference weights exported to: '{WEIGHTS_PATH}'")

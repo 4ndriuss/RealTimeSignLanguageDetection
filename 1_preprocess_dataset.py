@@ -19,15 +19,19 @@ label_map = {label: num for num, label in enumerate(actions)}
 
 print(f"Detected {len(actions)} gesture classes: {actions}")
 
-# Configuration for the expected number of hands per class (from 0_audit_dataset.py).
+# Accepted number of detected hands per class (from 0_audit_dataset.py).
 # Please adjust according to BISINDO gestures (e.g., 'A' needs 2 hands, 'C' needs 1).
-# If a class is not in this dictionary, any number of detected hands will be accepted.
+# F, N, P and Y are two-handed signs whose hands touch or overlap, so MediaPipe
+# often detects only one of them (audit: P {1: 35, 2: 44}, N {1: 53, 2: 27}).
+# Both layouts are accepted, because the live detector produces both too;
+# accepting only one would teach the model a layout it rarely sees live.
+# If a class is not in this dictionary, any non-zero number of hands is accepted.
 EXPECTED_HANDS = {
     'A': 2, 'B': 2, 'C': 1, 'D': 2, 'E': 1,
-    'F': 1, 'G': 2, 'H': 2, 'I': 1, 'J': 1,
-    'K': 2, 'L': 1, 'M': 2, 'N': 1, 'O': 1,
-    'P': 1, 'Q': 2, 'R': 1, 'S': 2, 'T': 2,
-    'U': 1, 'V': 1, 'W': 2, 'X': 2, 'Y': 1,
+    'F': (1, 2), 'G': 2, 'H': 2, 'I': 1, 'J': 1,
+    'K': 2, 'L': 1, 'M': 2, 'N': (1, 2), 'O': 1,
+    'P': (1, 2), 'Q': 2, 'R': 1, 'S': 2, 'T': 2,
+    'U': 1, 'V': 1, 'W': 2, 'X': 2, 'Y': (1, 2),
     'Z': 1
 }
 
@@ -56,8 +60,10 @@ for action in actions:
 
         # Filter based on the number of detected hands vs expected hands
         detected_hands = len(results.hand_landmarks) if results.hand_landmarks else 0
-        expected = EXPECTED_HANDS.get(action, detected_hands)
-        if detected_hands == 0 or detected_hands != expected:
+        expected = EXPECTED_HANDS.get(action, (1, 2))
+        if isinstance(expected, int):
+            expected = (expected,)
+        if detected_hands not in expected:
             continue
 
         # Extract the 152 normalized features; the image shape is required to

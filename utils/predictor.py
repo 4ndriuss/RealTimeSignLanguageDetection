@@ -6,8 +6,19 @@ from typing import Optional
 
 import numpy as np
 
-from utils.config import ACTIONS_PATH, CONFIDENCE_THRESHOLD, MODEL_PATH
+from utils.config import ACTIONS_PATH, CONFIDENCE_THRESHOLD, WEIGHTS_PATH
 from utils.features import NUM_FEATURES
+
+def _softmax(h):
+    e = np.exp(h - h.max(axis=-1, keepdims=True))
+    return e / e.sum(axis=-1, keepdims=True)
+
+
+_ACTIVATIONS = {
+    'relu': lambda h: np.maximum(h, 0),
+    'linear': lambda h: h,
+    'softmax': _softmax,
+}
 
 
 @dataclass(frozen=True)
@@ -21,26 +32,36 @@ class Prediction:
 
 
 class SignPredictor:
-    """Wraps the trained Keras model and its class labels."""
+    """Runs the trained MLP on its exported NumPy weights (see utils/export.py).
 
-    def __init__(self, model_path=MODEL_PATH, actions_path=ACTIONS_PATH,
+    TensorFlow is not needed at inference: a NumPy forward pass of this small
+    network takes ~0.06 ms, versus ~10 ms for an eager Keras call.
+    """
+
+    def __init__(self, weights_path=WEIGHTS_PATH, actions_path=ACTIONS_PATH,
                  threshold=CONFIDENCE_THRESHOLD):
-        if not os.path.exists(model_path) or not os.path.exists(actions_path):
+        if not os.path.exists(actions_path):
             raise FileNotFoundError(
-                "Model or actions file not found. Run '1_preprocess_dataset.py' "
-                "and '2_train_model.py' first."
+                "Actions file not found. Run '1_preprocess_dataset.py' and "
+                "'2_train_model.py' first."
+            )
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(
+                f"Model weights '{weights_path}' not found. Run '2_train_model.py', "
+                "or 'python -m utils.export' to convert an existing .keras model."
             )
 
-        import tensorflow as tf  # Imported lazily: TensorFlow is slow to import.
-
-        self.model = tf.keras.models.load_model(model_path)
+        with np.load(weights_path) as data:
+            activations = [str(a) for a in data['activations']]
+            self.layers = [(data[f'W{i}'], data[f'b{i}'], _ACTIVATIONS[act])
+                           for i, act in enumerate(activations)]
         self.actions = [str(a) for a in np.load(actions_path)]
         self.threshold = threshold
 
         # Fail fast with a clear message if the model was trained on an older
         # feature format (e.g. the previous 126-feature version) instead of
         # crashing later with a cryptic shape-mismatch error.
-        expected = self.model.input_shape[-1]
+        expected = self.layers[0][0].shape[0]
         if expected != NUM_FEATURES:
             raise ValueError(
                 f"Model expects {expected} features, but the extractor produces "
@@ -48,16 +69,16 @@ class SignPredictor:
                 "'2_train_model.py' to retrain the model."
             )
 
-        # Warm-up: the first call builds the graph and is much slower, so pay
-        # that cost at startup instead of on the first real request/frame.
-        self.predict(np.zeros(NUM_FEATURES))
+    def predict_proba(self, features):
+        """Return class probabilities for a (NUM_FEATURES,) or (N, NUM_FEATURES) input."""
+        h = np.asarray(features, dtype=np.float32)
+        for W, b, activation in self.layers:
+            h = activation(h @ W + b)
+        return h
 
     def predict(self, features):
         """Classify one NUM_FEATURES-long feature vector."""
-        input_data = np.asarray(features, dtype=np.float32).reshape(1, NUM_FEATURES)
-        # Calling the model directly avoids the per-call overhead of
-        # model.predict(), which is significant when invoked every frame.
-        probs = self.model(input_data, training=False).numpy()[0]
+        probs = self.predict_proba(np.reshape(features, NUM_FEATURES))
 
         index = int(np.argmax(probs))
         confidence = float(probs[index])

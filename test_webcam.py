@@ -31,7 +31,7 @@ while cap.isOpened():
 
     cv2.imshow('MediaPipe Tasks Test (Python 3.12)', image)
 
-    if cv2.waitKey(10) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()
