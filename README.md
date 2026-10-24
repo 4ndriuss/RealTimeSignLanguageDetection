@@ -71,13 +71,13 @@ python 1_preprocess_dataset.py
 ```bash
 python 2_train_model.py
 ```
-**Function:** This script loads the `.npy` files extracted previously. It splits the data into testing and training sets, multiplies the training data randomly (augmentation), trains the neural network, evaluates the Test Accuracy score, and finally saves it in the `models/sign_language_model.keras` format.
+**Function:** This script loads the `.npy` files extracted previously. It splits the data into testing and training sets, multiplies the training data randomly (augmentation), trains the neural network, evaluates the Test Accuracy score, and finally saves it in the `models/sign_language_model.keras` format. It also exports the weights to `models/sign_language_model.npz`, which the real-time script runs with plain NumPy (no TensorFlow needed at inference). To convert an existing `.keras` model without retraining, run `python -m utils.export`.
 
 ### Step 3: Real-Time Camera Detection (Local OpenCV)
 ```bash
 python 3_realtime_detection.py
 ```
-**Function:** Turns on your Webcam! The program will match the hand postures captured from the video against the trained `.keras` model in real-time. The predicted text (Gesture) along with its confidence percentage will appear in the top left corner of the frame.
+**Function:** Turns on your Webcam! The program will match the hand postures captured from the video against the trained model (`.npz` weights) in real-time. MediaPipe runs in VIDEO mode, tracking hands between frames instead of re-detecting them on every frame, and the webcam is read on a background thread so only the newest frame is processed. The predicted text (Gesture) along with its confidence percentage will appear in the top left corner of the frame.
 *(Press the **Q key** on your keyboard while the video window is active to exit and turn off the camera.)*
 
 ---
@@ -88,12 +88,14 @@ python 3_realtime_detection.py
 RealTimeSignLanguageDetection/
 │
 ├── preprocessed_data/      # Destination for extracted coordinate points (.npy)
-├── models/                 # Destination for the trained Keras model (.keras)
+├── models/                 # Trained Keras model (.keras) and its NumPy inference weights (.npz)
 ├── utils/
+│   ├── camera.py           # Background-thread webcam capture (newest frame only)
 │   ├── config.py           # Shared paths, dataset & inference constants
+│   ├── export.py           # Exports the Keras model to NumPy weights
 │   ├── features.py         # Pure-NumPy 152-feature extraction
 │   ├── mediapipe_utils.py  # MediaPipe tracking & drawing helpers
-│   └── predictor.py        # Shared Keras model loader, validator & smoother
+│   └── predictor.py        # NumPy model loader, validator & smoother
 │
 ├── 0_audit_dataset.py      # Audits dominant hand count per BISINDO class
 ├── 1_preprocess_dataset.py # Extracts raw images into NumPy matrices

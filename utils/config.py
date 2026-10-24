@@ -15,6 +15,9 @@ X_PATH = os.path.join(PREPROCESSED_DIR, 'X.npy')
 Y_PATH = os.path.join(PREPROCESSED_DIR, 'y.npy')
 ACTIONS_PATH = os.path.join(PREPROCESSED_DIR, 'actions.npy')
 MODEL_PATH = os.path.join(MODELS_DIR, 'sign_language_model.keras')
+# Plain NumPy weights exported from MODEL_PATH (see utils/export.py). The
+# real-time script runs on these, so it does not need TensorFlow at all.
+WEIGHTS_PATH = os.path.join(MODELS_DIR, 'sign_language_model.npz')
 
 # --- Dataset ---------------------------------------------------------------
 KAGGLE_DATASET = 'agungmrf/indonesian-sign-language-bisindo'
